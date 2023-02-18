@@ -1,5 +1,6 @@
 use anyhow::Result;
 use obws::Client;
+use time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -13,6 +14,13 @@ async fn main() -> Result<()> {
     // Get a list of available scenes and print them out.
     let scene_list = client.scenes().list().await?;
     println!("{:#?}", scene_list);
+    
+    client.transitions().set_current_duration(Duration::new(1, 0)).await?;
+
+    let transition_list = client.transitions().list().await?;
+    println!("{transition_list:#?}");
+
+    client.transitions().trigger().await?;
 
     Ok(())
 }
