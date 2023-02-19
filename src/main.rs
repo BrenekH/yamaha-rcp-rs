@@ -7,6 +7,8 @@ use tokio::time;
 #[tokio::main]
 async fn main() {
     let mut mixer = Mixer::new("192.168.0.128:49280").await.unwrap();
+    println!("Connected to mixer!");
+
     mixer.fader_level(1).await.unwrap();
     mixer.fade(1, 10_000, -32768, 500).await.unwrap();
 
@@ -37,7 +39,7 @@ impl Mixer {
 
     async fn fader_level(&mut self, channel: u16) -> Result<i32, Box<dyn Error>> {
         let response = self
-            .send_command(format!("MIXER:Current/InCh/Fader/Level {channel}\n"))
+            .send_command(format!("get MIXER:Current/InCh/Fader/Level {channel} 0\n"))
             .await?;
         println!("{response}");
         Ok(0)
@@ -55,7 +57,7 @@ impl Mixer {
 
     async fn muted(&mut self, channel: u16) -> Result<bool, Box<dyn Error>> {
         let response = self
-            .send_command(format!("MIXER:Current/InCh/Fader/On {channel} 0"))
+            .send_command(format!("get MIXER:Current/InCh/Fader/On {channel} 0\n"))
             .await?;
         println!("{response}");
         Ok(false)
@@ -64,7 +66,7 @@ impl Mixer {
     async fn set_muted(&mut self, channel: u16, muted: bool) -> Result<(), Box<dyn Error>> {
         let response = self
             .send_command(format!(
-                "set MIXER:Current/InCh/Fader/On {channel} 0 {}",
+                "set MIXER:Current/InCh/Fader/On {channel} 0 {}\n",
                 if muted { 1 } else { 0 }
             ))
             .await?;
