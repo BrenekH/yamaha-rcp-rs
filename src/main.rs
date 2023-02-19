@@ -1,26 +1,19 @@
-use anyhow::Result;
-use obws::Client;
-use time::Duration;
+use std::io::prelude::*;
+use std::net::TcpStream;
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    // Connect to the OBS instance through obs-websocket.
-    let client = Client::connect("localhost", 4455, None::<String>).await?;
+fn main() -> std::io::Result<()> {
+    let mut stream = TcpStream::connect("192.168.0.128:49280")?;
+    println!("stream connected");
 
-    // Get and print out version information of OBS and obs-websocket.
-    let version = client.general().version().await?;
-    println!("{:#?}", version);
+    for fader_val in (-32768..0).rev() {
+        stream.write(format!("set MIXER:Current/InCh/Fader/Level 1 0 {}\n", fader_val).as_bytes())?;
+        println!("stream written to");
+    }
 
-    // Get a list of available scenes and print them out.
-    let scene_list = client.scenes().list().await?;
-    println!("{:#?}", scene_list);
-    
-    client.transitions().set_current_duration(Duration::new(1, 0)).await?;
-
-    let transition_list = client.transitions().list().await?;
-    println!("{transition_list:#?}");
-
-    client.transitions().trigger().await?;
+    // let mut response = [0; 128];
+    // stream.read(&mut response)?;
+    //
+    // println!("{} {:?}", std::str::from_utf8(&response).unwrap(), response);
 
     Ok(())
 }
