@@ -9,6 +9,9 @@ async fn main() {
     let mut mixer = Mixer::new("192.168.0.128:49280").await.unwrap();
     mixer.fader_level(1).await.unwrap();
     mixer.fade(1, 10_000, -32768, 500).await.unwrap();
+
+    mixer.muted(0).await.unwrap();
+    mixer.set_muted(0, true).await.unwrap();
 }
 
 struct Mixer {
@@ -33,7 +36,9 @@ impl Mixer {
     }
 
     async fn fader_level(&mut self, channel: u16) -> Result<i32, Box<dyn Error>> {
-        let response = self.send_command(format!("MIXER:Current/InCh/Fader/Level {channel}\n")).await?;
+        let response = self
+            .send_command(format!("MIXER:Current/InCh/Fader/Level {channel}\n"))
+            .await?;
         println!("{response}");
         Ok(0)
     }
@@ -42,6 +47,25 @@ impl Mixer {
         let response = self
             .send_command(format!(
                 "set MIXER:Current/InCh/Fader/Level {channel} 0 {value}\n"
+            ))
+            .await?;
+        println!("{response}");
+        Ok(())
+    }
+
+    async fn muted(&mut self, channel: u16) -> Result<bool, Box<dyn Error>> {
+        let response = self
+            .send_command(format!("MIXER:Current/InCh/Fader/On {channel} 0"))
+            .await?;
+        println!("{response}");
+        Ok(false)
+    }
+
+    async fn set_muted(&mut self, channel: u16, muted: bool) -> Result<(), Box<dyn Error>> {
+        let response = self
+            .send_command(format!(
+                "set MIXER:Current/InCh/Fader/On {channel} 0 {}",
+                if muted { 1 } else { 0 }
             ))
             .await?;
         println!("{response}");
