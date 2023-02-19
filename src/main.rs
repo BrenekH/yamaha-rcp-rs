@@ -21,47 +21,50 @@ impl Mixer {
         })
     }
 
+    async fn send_command(&mut self, cmd: String) -> Result<String, Box<dyn Error>> {
+        self.stream.write_all(cmd.as_bytes()).await?;
+
+        let mut response_buf = [0; 256];
+        self.stream.read(&mut response_buf).await?;
+
+        let result = std::str::from_utf8(&response_buf).unwrap();
+        Ok(result.to_owned())
+    }
+
+    async fn set_fader_level(&mut self, channel: u16, value: i32) -> Result<(), Box<dyn Error>> {
+        let response = self
+            .send_command(format!(
+                "set MIXER:Current/InCh/Fader/Level {channel} 0 {value}\n"
+            ))
+            .await?;
+        println!("{response}");
+        Ok(())
+    }
+
     async fn fade(
         &mut self,
         channel: u16,
         initial_value: i32,
         final_value: i32,
         duration_ms: u64,
-    ) -> std::io::Result<()> {
+    ) -> Result<(), Box<dyn Error>> {
         let num_steps: u64 = duration_ms / 50;
         let step_delta: i32 = (final_value - initial_value) / (num_steps as i32);
 
         let mut interval = time::interval(time::Duration::from_millis(50));
         let mut current_value = initial_value;
-        let mut response_buf = [0; 256];
 
         for _i in 0..num_steps {
             interval.tick().await;
 
-            self.stream
-                .write_all(
-                    format!("set MIXER:Current/InCh/Fader/Level {channel} 0 {current_value}\n")
-                        .as_bytes(),
-                )
-                .await?;
+            self.set_fader_level(channel, current_value).await?;
             println!("Set channel {channel} to {current_value}");
-
-            self.stream.read(&mut response_buf).await?;
-            println!("{}", std::str::from_utf8(&response_buf).unwrap());
 
             current_value += step_delta;
         }
 
-        self.stream
-            .write(
-                format!("set MIXER:Current/InCh/Fader/Level {channel} 0 {final_value}\n")
-                    .as_bytes(),
-            )
-            .await?;
+        self.set_fader_level(channel, current_value).await?;
         println!("Set channel {channel} to {final_value}");
-
-        self.stream.read(&mut response_buf).await?;
-        println!("{}", std::str::from_utf8(&response_buf).unwrap());
 
         Ok(())
     }
