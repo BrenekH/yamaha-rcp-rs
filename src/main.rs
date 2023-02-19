@@ -1,4 +1,5 @@
 use std::error::Error;
+use futures::future;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
@@ -7,10 +8,25 @@ use tokio::time;
 #[tokio::main]
 async fn main() {
     let mut mixer = Mixer::new("192.168.0.128:49280").await.unwrap();
+    let mut mixer2 = Mixer::new("192.168.0.128:49280").await.unwrap();
     println!("Connected to mixer!");
 
     mixer.fader_level(1).await.unwrap();
-    mixer.fade(1, 10_00, -138_00, 1_000).await.unwrap();
+    // mixer.fade(1, 10_00, -138_00, 10_000).await.unwrap();
+    time::sleep(time::Duration::from_secs(1)).await;
+    // mixer.fade(1, -138_00, 10_00, 1_000).await.unwrap();
+
+    let chan1_fader = mixer.fade(1, 10_00, -40_00, 3_000);
+    let chan2_fader = mixer2.fade(2, -40_00, 10_00, 3_000);
+    future::join(chan1_fader, chan2_fader).await;
+    mixer.set_fader_level(1, -138_00).await.unwrap();
+
+    time::sleep(time::Duration::from_secs(3)).await;
+
+    let chan1_fader = mixer.fade(1, -40_00, 10_00, 3_000);
+    let chan2_fader = mixer2.fade(2, 10_00, -40_00, 3_000);
+    future::join(chan1_fader, chan2_fader).await;
+    mixer.set_fader_level(2, -138_00).await.unwrap();
 
     mixer.muted(0).await.unwrap();
     mixer.set_muted(0, true).await.unwrap();
