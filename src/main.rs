@@ -10,7 +10,7 @@ async fn main() {
     println!("Connected to mixer!");
 
     mixer.fader_level(1).await.unwrap();
-    mixer.fade(1, 10_000, -32768, 500).await.unwrap();
+    mixer.fade(1, 10_00, -138_00, 1_000).await.unwrap();
 
     mixer.muted(0).await.unwrap();
     mixer.set_muted(0, true).await.unwrap();
@@ -18,12 +18,18 @@ async fn main() {
 
 struct Mixer {
     stream: TcpStream,
+    max_fader_val: i32,
+    min_fader_val: i32,
+    neg_inf_val: i32,
 }
 
 impl Mixer {
     async fn new(addr: &str) -> Result<Self, Box<dyn Error>> {
         Ok(Mixer {
             stream: TcpStream::connect(addr).await?,
+            max_fader_val: 10_00,
+            min_fader_val: -138_00,
+            neg_inf_val: -327_68,
         })
     }
 
@@ -77,10 +83,13 @@ impl Mixer {
     async fn fade(
         &mut self,
         channel: u16,
-        initial_value: i32,
-        final_value: i32,
+        mut initial_value: i32,
+        mut final_value: i32,
         duration_ms: u64,
     ) -> Result<(), Box<dyn Error>> {
+        initial_value = initial_value.clamp(self.min_fader_val, self.max_fader_val);
+        final_value = final_value.clamp(self.min_fader_val, self.max_fader_val);
+
         let num_steps: u64 = duration_ms / 50;
         let step_delta: i32 = (final_value - initial_value) / (num_steps as i32);
 
@@ -96,7 +105,9 @@ impl Mixer {
             current_value += step_delta;
         }
 
-        self.set_fader_level(channel, current_value).await?;
+        final_value = if final_value == self.min_fader_val { self.neg_inf_val } else { final_value };
+
+        self.set_fader_level(channel, final_value).await?;
         println!("Set channel {channel} to {final_value}");
 
         Ok(())
