@@ -7,6 +7,7 @@ use tokio::time;
 #[tokio::main]
 async fn main() {
     let mut mixer = Mixer::new("192.168.0.128:49280").await.unwrap();
+    mixer.fader_level(1).await.unwrap();
     mixer.fade(1, 10_000, -32768, 500).await.unwrap();
 }
 
@@ -29,6 +30,12 @@ impl Mixer {
 
         let result = std::str::from_utf8(&response_buf).unwrap();
         Ok(result.to_owned())
+    }
+
+    async fn fader_level(&mut self, channel: u16) -> Result<i32, Box<dyn Error>> {
+        let response = self.send_command(format!("MIXER:Current/InCh/Fader/Level {channel}\n")).await?;
+        println!("{response}");
+        Ok(0)
     }
 
     async fn set_fader_level(&mut self, channel: u16, value: i32) -> Result<(), Box<dyn Error>> {
