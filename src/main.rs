@@ -1,5 +1,6 @@
-use std::error::Error;
 use futures::future;
+use std::error::Error;
+use std::str::FromStr;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
@@ -11,25 +12,78 @@ async fn main() {
     let mut mixer2 = Mixer::new("192.168.0.128:49280").await.unwrap();
     println!("Connected to mixer!");
 
+    println!("{:?}", mixer.color(0).await.unwrap());
+    mixer.set_color(1, LabelColor::Blue).await.unwrap();
+
     mixer.fader_level(1).await.unwrap();
     // mixer.fade(1, 10_00, -138_00, 10_000).await.unwrap();
-    time::sleep(time::Duration::from_secs(1)).await;
+    // time::sleep(time::Duration::from_secs(1)).await;
     // mixer.fade(1, -138_00, 10_00, 1_000).await.unwrap();
 
     let chan1_fader = mixer.fade(1, 10_00, -40_00, 3_000);
     let chan2_fader = mixer2.fade(2, -40_00, 10_00, 3_000);
-    future::join(chan1_fader, chan2_fader).await;
+    let results = future::join(chan1_fader, chan2_fader).await;
+    results.0.unwrap();
+    results.1.unwrap();
     mixer.set_fader_level(1, -138_00).await.unwrap();
 
     time::sleep(time::Duration::from_secs(3)).await;
 
     let chan1_fader = mixer.fade(1, -40_00, 10_00, 3_000);
     let chan2_fader = mixer2.fade(2, 10_00, -40_00, 3_000);
-    future::join(chan1_fader, chan2_fader).await;
-    mixer.set_fader_level(2, -138_00).await.unwrap();
+    let results = future::join(chan1_fader, chan2_fader).await;
+    results.0.unwrap();
+    results.1.unwrap();
+    mixer2.set_fader_level(2, -138_00).await.unwrap();
 
     mixer.muted(0).await.unwrap();
     mixer.set_muted(0, true).await.unwrap();
+}
+
+#[derive(Debug)]
+enum LabelColor {
+    Purple,
+    Pink,
+    Red,
+    Orange,
+    Yellow,
+    Blue,
+    SkyBlue,
+    Green,
+}
+
+impl LabelColor {
+    pub fn to_string(&self) -> String {
+        match self {
+            Self::Purple => "Purple",
+            Self::Pink => "Pink",
+            Self::Red => "Red",
+            Self::Orange => "Orange",
+            Self::Yellow => "Yellow",
+            Self::Blue => "Blue",
+            Self::SkyBlue => "SkyBlue",
+            Self::Green => "Green",
+        }
+        .to_string()
+    }
+}
+
+impl FromStr for LabelColor {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Purple" => Ok(Self::Purple),
+            "Pink" => Ok(Self::Pink),
+            "Red" => Ok(Self::Red),
+            "Orange" => Ok(Self::Orange),
+            "Yellow" => Ok(Self::Yellow),
+            "Blue" => Ok(Self::Blue),
+            "SkyBlue" => Ok(Self::SkyBlue),
+            "Green" => Ok(Self::Green),
+            _ => Err(()),
+        }
+    }
 }
 
 struct Mixer {
@@ -96,6 +150,53 @@ impl Mixer {
         Ok(())
     }
 
+    async fn color(&mut self, channel: u16) -> Result<LabelColor, Box<dyn Error>> {
+        let response = self
+            .send_command(format!("get MIXER:Current/InCh/Label/Color {channel} 0\n"))
+            .await?;
+        let response = response.trim();
+
+        if response.starts_with("ERROR") {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                response,
+            )));
+        }
+
+        let split = response.split("\n");
+        let mut response_val = "";
+        for item in split {
+            if !item.starts_with("OK") {
+                continue;
+            }
+
+            response_val = item.split(" ").last().unwrap();
+
+            break;
+        }
+
+        Ok(LabelColor::from_str(&(response_val.replace("\"", ""))).unwrap())
+    }
+
+    async fn set_color(&mut self, channel: u16, color: LabelColor) -> Result<(), Box<dyn Error>> {
+        let response = self
+            .send_command(format!(
+                "set MIXER:Current/InCh/Label/Color {channel} 0 \"{}\"\n",
+                color.to_string()
+            ))
+            .await?;
+        let response = response.trim();
+
+        if response.starts_with("ERROR") {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                response,
+            )));
+        }
+
+        Ok(())
+    }
+
     async fn fade(
         &mut self,
         channel: u16,
@@ -121,7 +222,11 @@ impl Mixer {
             current_value += step_delta;
         }
 
-        final_value = if final_value == self.min_fader_val { self.neg_inf_val } else { final_value };
+        final_value = if final_value == self.min_fader_val {
+            self.neg_inf_val
+        } else {
+            final_value
+        };
 
         self.set_fader_level(channel, final_value).await?;
         println!("Set channel {channel} to {final_value}");
