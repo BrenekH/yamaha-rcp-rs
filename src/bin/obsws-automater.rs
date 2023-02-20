@@ -1,6 +1,5 @@
 use anyhow::Result;
 use obws::Client;
-use time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<()> {

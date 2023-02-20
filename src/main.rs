@@ -109,7 +109,7 @@ impl Mixer {
         let mut response_buf = [0; 256];
         self.stream.read(&mut response_buf).await?;
 
-        let result = std::str::from_utf8(&response_buf).unwrap();
+        let result = std::str::from_utf8(&response_buf)?;
         Ok(result.to_owned())
     }
 
@@ -133,7 +133,17 @@ impl Mixer {
                 continue;
             }
 
-            response_val = item.split(" ").last().unwrap().parse().unwrap();
+            let opt = item.split(" ").last();
+            if opt.is_none() {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Couldn't find the last item",
+                )));
+            }
+
+            // The following unwrap call should be safe because of the above if statement checking
+            // the Option's value
+            response_val = opt.unwrap().parse()?;
 
             break;
         }
@@ -181,7 +191,19 @@ impl Mixer {
                 continue;
             }
 
-            response_val = if item.split(" ").last().unwrap() == "0" {
+            let opt = item.split(" ").last();
+            if opt.is_none() {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Could not get last item in list",
+                )));
+            }
+
+            // The following unwrap call should be safe because of the above if statement checking
+            // the Option's value
+            let opt_val = opt.unwrap();
+
+            response_val = if opt_val == "0" {
                 false
             } else {
                 true
@@ -232,7 +254,17 @@ impl Mixer {
                 continue;
             }
 
-            response_val = item.split(" ").last().unwrap();
+            let opt = item.split(" ").last();
+            if opt.is_none() {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Could not get last item in list",
+                )));
+            }
+
+            // The following unwrap call should be safe because of the above if statement checking
+            // the Option's value
+            response_val = opt.unwrap();
 
             break;
         }
