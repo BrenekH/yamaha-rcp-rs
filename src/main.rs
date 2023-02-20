@@ -117,8 +117,28 @@ impl Mixer {
         let response = self
             .send_command(format!("get MIXER:Current/InCh/Fader/Level {channel} 0\n"))
             .await?;
-        println!("{response}");
-        Ok(0)
+        let response = response.replace("\0", "");
+
+        if response.starts_with("ERROR") {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                response,
+            )));
+        }
+
+        let split = response.split("\n");
+        let mut response_val = 0;
+        for item in split {
+            if !item.starts_with("OK") {
+                continue;
+            }
+
+            response_val = item.split(" ").last().unwrap().parse().unwrap();
+
+            break;
+        }
+
+        Ok(response_val)
     }
 
     async fn set_fader_level(&mut self, channel: u16, value: i32) -> Result<(), Box<dyn Error>> {
@@ -127,7 +147,17 @@ impl Mixer {
                 "set MIXER:Current/InCh/Fader/Level {channel} 0 {value}\n"
             ))
             .await?;
-        println!("{response}");
+        let response = response.replace("\0", "");
+
+        if response.starts_with("ERROR") {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                response,
+            )));
+        }
+
+        // Technically, this RCP call returns the actually set value, which we could capture and
+        // return to the consumer.
         Ok(())
     }
 
@@ -135,8 +165,32 @@ impl Mixer {
         let response = self
             .send_command(format!("get MIXER:Current/InCh/Fader/On {channel} 0\n"))
             .await?;
-        println!("{response}");
-        Ok(false)
+        let response = response.replace("\0", "");
+
+        if response.starts_with("ERROR") {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                response,
+            )));
+        }
+
+        let split = response.split("\n");
+        let mut response_val = false;
+        for item in split {
+            if !item.starts_with("OK") {
+                continue;
+            }
+
+            response_val = if item.split(" ").last().unwrap() == "0" {
+                false
+            } else {
+                true
+            };
+
+            break;
+        }
+
+        Ok(response_val)
     }
 
     async fn set_muted(&mut self, channel: u16, muted: bool) -> Result<(), Box<dyn Error>> {
@@ -146,7 +200,15 @@ impl Mixer {
                 if muted { 1 } else { 0 }
             ))
             .await?;
-        println!("{response}");
+        let response = response.replace("\0", "");
+
+        if response.starts_with("ERROR") {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                response,
+            )));
+        }
+
         Ok(())
     }
 
@@ -154,7 +216,7 @@ impl Mixer {
         let response = self
             .send_command(format!("get MIXER:Current/InCh/Label/Color {channel} 0\n"))
             .await?;
-        let response = response.trim();
+        let response = response.replace("\0", "");
 
         if response.starts_with("ERROR") {
             return Err(Box::new(std::io::Error::new(
@@ -185,7 +247,7 @@ impl Mixer {
                 color.to_string()
             ))
             .await?;
-        let response = response.trim();
+        let response = response.replace("\0", "");
 
         if response.starts_with("ERROR") {
             return Err(Box::new(std::io::Error::new(
