@@ -184,7 +184,7 @@ impl Mixer {
         let response = self
             .send_command(format!(
                 "set MIXER:Current/InCh/Fader/On {channel} 0 {}\n",
-                if muted { 1 } else { 0 }
+                if muted { 0 } else { 1 }
             ))
             .await?;
         let response = response.replace("\0", "");
