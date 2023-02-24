@@ -34,7 +34,7 @@ impl LabelColor {
 }
 
 impl FromStr for LabelColor {
-    type Err = ();
+    type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -46,7 +46,7 @@ impl FromStr for LabelColor {
             "Blue" => Ok(Self::Blue),
             "SkyBlue" => Ok(Self::SkyBlue),
             "Green" => Ok(Self::Green),
-            _ => Err(()),
+            _ => Err(format!("unknown LabelColor descriptor: {s}")),
         }
     }
 }
@@ -100,19 +100,17 @@ impl Mixer {
 
         for line in result_str.split("\n") {
             if line.starts_with("ERROR") {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    line,
-                )));
+                return Err(Box::new(RCPError {
+                    message: line.to_owned(),
+                }));
             } else if line.starts_with("OK") {
-                return Ok(line.to_string());
+                return Ok(line.to_owned());
             }
         }
 
-        Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Could not find response line from mixer",
-        )))
+        Err(Box::new(RCPError {
+            message: "Could not find response line from mixer".to_owned(),
+        }))
     }
 
     pub async fn fader_level(&mut self, channel: u16) -> Result<i32, Box<dyn Error>> {
@@ -122,10 +120,7 @@ impl Mixer {
         let response = response.replace("\0", "");
 
         if response.starts_with("ERROR") {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                response,
-            )));
+            return Err(Box::new(RCPError { message: response }));
         }
 
         let split = response.split("\n");
@@ -137,10 +132,9 @@ impl Mixer {
 
             let opt = item.split(" ").last();
             if opt.is_none() {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Couldn't find the last item",
-                )));
+                return Err(Box::new(RCPError {
+                    message: "Couldn't find the last item".to_owned(),
+                }));
             }
 
             // The following unwrap call should be safe because of the above if statement checking
@@ -166,10 +160,7 @@ impl Mixer {
         let response = response.replace("\0", "");
 
         if response.starts_with("ERROR") {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                response,
-            )));
+            return Err(Box::new(RCPError { message: response }));
         }
 
         // Technically, this RCP call returns the actually set value, which we could capture and
@@ -184,10 +175,7 @@ impl Mixer {
         let response = response.replace("\0", "");
 
         if response.starts_with("ERROR") {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                response,
-            )));
+            return Err(Box::new(RCPError { message: response }));
         }
 
         let split = response.split("\n");
@@ -199,10 +187,9 @@ impl Mixer {
 
             let opt = item.split(" ").last();
             if opt.is_none() {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Could not get last item in list",
-                )));
+                return Err(Box::new(RCPError {
+                    message: "Could not get last item in list".to_owned(),
+                }));
             }
 
             // The following unwrap call should be safe because of the above if statement checking
@@ -227,10 +214,7 @@ impl Mixer {
         let response = response.replace("\0", "");
 
         if response.starts_with("ERROR") {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                response,
-            )));
+            return Err(Box::new(RCPError { message: response }));
         }
 
         Ok(())
@@ -243,10 +227,7 @@ impl Mixer {
         let response = response.replace("\0", "");
 
         if response.starts_with("ERROR") {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                response,
-            )));
+            return Err(Box::new(RCPError { message: response }));
         }
 
         let split = response.split("\n");
@@ -258,10 +239,9 @@ impl Mixer {
 
             let opt = item.split(" ").last();
             if opt.is_none() {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Could not get last item in list",
-                )));
+                return Err(Box::new(RCPError {
+                    message: "could not get last item in list".to_string(),
+                }));
             }
 
             // The following unwrap call should be safe because of the above if statement checking
@@ -288,10 +268,7 @@ impl Mixer {
         let response = response.replace("\0", "");
 
         if response.starts_with("ERROR") {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                response,
-            )));
+            return Err(Box::new(RCPError { message: response }));
         }
 
         Ok(())
@@ -336,5 +313,22 @@ impl Mixer {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct RCPError {
+    message: String,
+}
+
+impl std::fmt::Display for RCPError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl Error for RCPError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
     }
 }
