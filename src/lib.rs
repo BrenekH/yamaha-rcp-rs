@@ -56,6 +56,7 @@ pub struct Mixer {
     max_fader_val: i32,
     min_fader_val: i32,
     neg_inf_val: i32,
+    debug: bool,
 }
 
 impl Mixer {
@@ -65,7 +66,12 @@ impl Mixer {
             max_fader_val: 10_00,
             min_fader_val: -138_00,
             neg_inf_val: -327_68,
+            debug: false,
         })
+    }
+
+    pub fn set_debug(&mut self, d: bool) {
+        self.debug = d;
     }
 
     async fn send_command(&mut self, cmd: String) -> Result<String, Box<dyn Error>> {
@@ -311,7 +317,9 @@ impl Mixer {
             interval.tick().await;
 
             self.set_fader_level(channel, current_value).await?;
-            println!("Set channel {channel} to {current_value}");
+            if self.debug {
+                println!("Set channel {channel} to {current_value}");
+            }
 
             current_value += step_delta;
         }
@@ -323,7 +331,9 @@ impl Mixer {
         };
 
         self.set_fader_level(channel, final_value).await?;
-        println!("Set channel {channel} to {final_value}");
+        if self.debug {
+            println!("Set channel {channel} to {final_value}");
+        }
 
         Ok(())
     }
