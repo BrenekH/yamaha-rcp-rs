@@ -71,11 +71,42 @@ impl Mixer {
     async fn send_command(&mut self, cmd: String) -> Result<String, Box<dyn Error>> {
         self.stream.write_all(cmd.as_bytes()).await?;
 
+        let mut all_bytes = Vec::new();
         let mut response_buf = [0; 256];
-        self.stream.read(&mut response_buf).await?;
 
-        let result = std::str::from_utf8(&response_buf)?;
-        Ok(result.to_owned())
+        let mut num_read = self.stream.read(&mut response_buf).await?;
+        while num_read != 0 {
+            for byte in response_buf {
+                if byte != 0 {
+                    all_bytes.push(byte);
+                } else {
+                    // If we encounter a zero byte, we assume that it's the end of the
+                    // useful data in the buffer.
+                    break;
+                }
+            }
+
+            response_buf.iter_mut().for_each(|byte| *byte = 0);
+            num_read = self.stream.read(&mut response_buf).await?;
+        }
+
+        let result_str = std::str::from_utf8(&all_bytes)?;
+
+        for line in result_str.split("\n") {
+            if line.starts_with("ERROR") {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    line,
+                )));
+            } else if line.starts_with("OK") {
+                return Ok(line.to_string());
+            }
+        }
+
+        Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Could not find response line from mixer",
+        )))
     }
 
     pub async fn fader_level(&mut self, channel: u16) -> Result<i32, Box<dyn Error>> {
