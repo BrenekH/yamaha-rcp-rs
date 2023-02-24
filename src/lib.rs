@@ -80,7 +80,7 @@ impl Mixer {
         let mut all_bytes = Vec::new();
         let mut response_buf = [0; 256];
 
-        let mut num_read = self.stream.read(&mut response_buf).await?;
+        let mut num_read = self.stream.try_read(&mut response_buf)?;
         while num_read != 0 {
             for byte in response_buf {
                 if byte != 0 {
