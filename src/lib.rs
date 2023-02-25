@@ -75,6 +75,10 @@ impl Mixer {
     }
 
     async fn send_command(&mut self, cmd: String) -> Result<String, Box<dyn Error>> {
+        if self.debug {
+            println!("Sending command: {cmd}");
+        }
+
         self.stream.write_all(cmd.as_bytes()).await?;
 
         let mut all_bytes = Vec::new();
@@ -88,6 +92,9 @@ impl Mixer {
                         break;
                     } else {
                         for ele in buffer {
+                            if self.debug {
+                                println!("{}", ele);
+                            }
                             all_bytes.push(ele);
                         }
 
