@@ -92,9 +92,6 @@ impl Mixer {
                         break;
                     } else {
                         for ele in buffer {
-                            if self.debug {
-                                println!("{}", ele);
-                            }
                             all_bytes.push(ele);
                         }
 
@@ -107,13 +104,23 @@ impl Mixer {
             }
         }
 
+        if self.debug {
+            println!("Bytes: {all_bytes:?}");
+        }
         let result_str = std::str::from_utf8(&all_bytes)?;
+        if self.debug {
+            println!("NullStr: {result_str}");
+        }
         let result_str = result_str.replace("\0", "");
         if self.debug {
-            println!("{result_str}");
+            println!("Final: {result_str}");
         }
 
         for line in result_str.split("\n") {
+            if self.debug {
+                println!("Evaluating: {line}");
+            }
+            
             if line.starts_with("ERROR") {
                 return Err(Box::new(RCPError {
                     message: line.to_owned(),
