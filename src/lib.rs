@@ -78,22 +78,26 @@ impl Mixer {
         self.stream.write_all(cmd.as_bytes()).await?;
 
         let mut all_bytes = Vec::new();
-        let mut response_buf = [0; 256];
+        let buffer_size = 512;
 
-        let mut num_read = self.stream.try_read(&mut response_buf)?;
-        while num_read != 0 {
-            for byte in response_buf {
-                if byte != 0 {
-                    all_bytes.push(byte);
-                } else {
-                    // If we encounter a zero byte, we assume that it's the end of the
-                    // useful data in the buffer.
-                    break;
+        loop {
+            let mut buffer = vec![0; buffer_size];
+            match self.stream.read(&mut buffer).await {
+                Ok(n) => {
+                    if n == 0 {
+                        break;
+                    } else {
+                        for ele in buffer {
+                            all_bytes.push(ele);
+                        }
+
+                        if n < 512 {
+                            break;
+                        }
+                    }
                 }
+                Err(e) => return Err(Box::new(e)),
             }
-
-            response_buf.iter_mut().for_each(|byte| *byte = 0);
-            num_read = self.stream.read(&mut response_buf).await?;
         }
 
         let result_str = std::str::from_utf8(&all_bytes)?;
