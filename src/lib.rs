@@ -82,7 +82,7 @@ impl Mixer {
         self.stream.write_all(cmd.as_bytes()).await?;
 
         let mut all_bytes = Vec::new();
-        let buffer_size = 512;
+        let buffer_size = 4096;
 
         loop {
             let mut buffer = vec![0; buffer_size];
@@ -98,7 +98,7 @@ impl Mixer {
                             all_bytes.push(ele);
                         }
 
-                        if n < 512 {
+                        if n < buffer_size {
                             break;
                         }
                     }
