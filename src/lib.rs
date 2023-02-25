@@ -81,6 +81,8 @@ impl Mixer {
 
         self.stream.write_all(cmd.as_bytes()).await?;
 
+        tokio::time::sleep(time::Duration::from_millis(5)).await;
+
         let mut all_bytes = Vec::new();
         let buffer_size = 4096;
 
