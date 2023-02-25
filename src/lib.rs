@@ -109,6 +109,9 @@ impl Mixer {
 
         let result_str = std::str::from_utf8(&all_bytes)?;
         let result_str = result_str.replace("\0", "");
+        if self.debug {
+            println!("{result_str}");
+        }
 
         for line in result_str.split("\n") {
             if line.starts_with("ERROR") {
