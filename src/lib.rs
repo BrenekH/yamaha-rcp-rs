@@ -81,10 +81,29 @@ impl Mixer {
 
         self.stream.write_all(cmd.as_bytes()).await?;
 
-        tokio::time::sleep(time::Duration::from_millis(5)).await;
-
         let mut all_bytes = Vec::new();
-        let buffer_size = 4096;
+        let buffer_size = 512;
+
+        // Do an initial read and check it for our OK or ERROR signal
+        let mut buffer = vec![0; buffer_size];
+        self.stream.read(&mut buffer).await?;
+
+        let result_str = std::str::from_utf8(&buffer)?;
+        let result_str = result_str.replace("\0", "");
+
+        for line in result_str.split("\n") {
+            if self.debug {
+                println!("Evaluating: {line}");
+            }
+
+            if line.starts_with("ERROR") {
+                return Err(Box::new(RCPError {
+                    message: line.to_owned(),
+                }));
+            } else if line.starts_with("OK") {
+                return Ok(line.to_owned());
+            }
+        }
 
         loop {
             let mut buffer = vec![0; buffer_size];
@@ -106,23 +125,14 @@ impl Mixer {
             }
         }
 
-        if self.debug {
-            println!("Bytes: {all_bytes:?}");
-        }
         let result_str = std::str::from_utf8(&all_bytes)?;
-        if self.debug {
-            println!("NullStr: {result_str}");
-        }
         let result_str = result_str.replace("\0", "");
-        if self.debug {
-            println!("Final: {result_str}");
-        }
 
         for line in result_str.split("\n") {
             if self.debug {
                 println!("Evaluating: {line}");
             }
-            
+
             if line.starts_with("ERROR") {
                 return Err(Box::new(RCPError {
                     message: line.to_owned(),

@@ -7,6 +7,7 @@ use yamaha_rcp_rs::{LabelColor, Mixer};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut mixer = Mixer::new("192.168.0.128:49280").await?;
     let mut mixer2 = Mixer::new("192.168.0.128:49280").await?;
+    // mixer.set_debug(true);
     println!("Connected to mixer!");
 
     println!("{:?}", mixer.color(0).await?);
