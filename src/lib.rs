@@ -3,6 +3,10 @@ use std::str::FromStr;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
+use tokio::net::tcp::OwnedWriteHalf;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::Receiver;
+use tokio::task::JoinHandle;
 use tokio::time;
 
 #[derive(Debug)]
@@ -52,7 +56,9 @@ impl FromStr for LabelColor {
 }
 
 pub struct Mixer {
-    stream: TcpStream,
+    stream_writer: OwnedWriteHalf,
+    join_handle: JoinHandle<()>,
+    recv_channel: Receiver<String>,
     max_fader_val: i32,
     min_fader_val: i32,
     neg_inf_val: i32,
@@ -61,8 +67,18 @@ pub struct Mixer {
 
 impl Mixer {
     pub async fn new(addr: &str) -> Result<Self, Box<dyn Error>> {
+        let (tx, mut rx) = mpsc::channel::<String>(16);
+        let mut stream = TcpStream::connect(addr).await?;
+        let (reader, writer) = stream.into_split();
+
+        let join_handle = tokio::spawn(async move {
+            
+        });
+
         Ok(Mixer {
-            stream: TcpStream::connect(addr).await?,
+            stream_writer: writer,
+            join_handle,
+            recv_channel: rx,
             max_fader_val: 10_00,
             min_fader_val: -138_00,
             neg_inf_val: -327_68,
