@@ -2,11 +2,10 @@ use std::error::Error;
 use std::str::FromStr;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
-use tokio::net::TcpStream;
 use tokio::net::tcp::OwnedWriteHalf;
+use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
-use tokio::task::JoinHandle;
 use tokio::time;
 
 #[derive(Debug)]
@@ -57,7 +56,6 @@ impl FromStr for LabelColor {
 
 pub struct Mixer {
     stream_writer: OwnedWriteHalf,
-    join_handle: JoinHandle<()>,
     recv_channel: Receiver<String>,
     max_fader_val: i32,
     min_fader_val: i32,
@@ -67,17 +65,40 @@ pub struct Mixer {
 
 impl Mixer {
     pub async fn new(addr: &str) -> Result<Self, Box<dyn Error>> {
-        let (tx, mut rx) = mpsc::channel::<String>(16);
-        let mut stream = TcpStream::connect(addr).await?;
-        let (reader, writer) = stream.into_split();
+        let (tx, rx) = mpsc::channel::<String>(16);
+        let stream = TcpStream::connect(addr).await?;
+        let (mut reader, writer) = stream.into_split();
 
-        let join_handle = tokio::spawn(async move {
-            
+        tokio::spawn(async move {
+            let buffer_size = 512;
+
+            loop {
+                let mut line = Vec::new();
+                let mut buffer = vec![0; buffer_size];
+                match reader.read(&mut buffer).await {
+                    Ok(_) => {
+                        for ele in buffer {
+                            if ele == 0xA {
+                                let result = std::str::from_utf8(&line).unwrap();
+
+                                if result.starts_with("ERROR") || result.starts_with("OK") {
+                                    // Send line to channel
+                                    tx.send(result.to_owned()).await.unwrap();
+                                }
+
+                                line.clear();
+                            } else {
+                                line.push(ele);
+                            }
+                        }
+                    }
+                    Err(e) => return Err::<(), Box<std::io::Error>>(Box::new(e)),
+                }
+            }
         });
 
         Ok(Mixer {
             stream_writer: writer,
-            join_handle,
             recv_channel: rx,
             max_fader_val: 10_00,
             min_fader_val: -138_00,
@@ -95,72 +116,30 @@ impl Mixer {
             println!("Sending command: {cmd}");
         }
 
-        self.stream.write_all(cmd.as_bytes()).await?;
+        self.stream_writer.write_all(cmd.as_bytes()).await?;
 
-        let mut all_bytes = Vec::new();
-        let buffer_size = 512;
+        let response = self.recv_channel.recv().await;
 
-        // Do an initial read and check it for our OK or ERROR signal
-        let mut buffer = vec![0; buffer_size];
-        self.stream.read(&mut buffer).await?;
-
-        let result_str = std::str::from_utf8(&buffer)?;
-        let result_str = result_str.replace("\0", "");
-
-        for line in result_str.split("\n") {
-            if self.debug {
-                println!("Evaluating: {line}");
-            }
-
-            if line.starts_with("ERROR") {
-                return Err(Box::new(RCPError {
-                    message: line.to_owned(),
-                }));
-            } else if line.starts_with("OK") {
-                return Ok(line.to_owned());
-            }
-        }
-
-        loop {
-            let mut buffer = vec![0; buffer_size];
-            match self.stream.read(&mut buffer).await {
-                Ok(n) => {
-                    if n == 0 {
-                        break;
-                    } else {
-                        for ele in buffer {
-                            all_bytes.push(ele);
-                        }
-
-                        if n < buffer_size {
-                            break;
-                        }
-                    }
+        match response {
+            Some(v) => {
+                if v.starts_with("ERROR") {
+                    return Err(Box::new(RCPError {
+                        message: v.to_owned(),
+                    }));
+                } else if v.starts_with("OK") {
+                    return Ok(v);
+                } else {
+                    return Err(Box::new(RCPError {
+                        message: format!("received message did not start with ERROR or OK: {v}"),
+                    }));
                 }
-                Err(e) => return Err(Box::new(e)),
             }
-        }
-
-        let result_str = std::str::from_utf8(&all_bytes)?;
-        let result_str = result_str.replace("\0", "");
-
-        for line in result_str.split("\n") {
-            if self.debug {
-                println!("Evaluating: {line}");
-            }
-
-            if line.starts_with("ERROR") {
+            None => {
                 return Err(Box::new(RCPError {
-                    message: line.to_owned(),
+                    message: "closed channel from reader task".to_owned(),
                 }));
-            } else if line.starts_with("OK") {
-                return Ok(line.to_owned());
             }
         }
-
-        Err(Box::new(RCPError {
-            message: "Could not find response line from mixer".to_owned(),
-        }))
     }
 
     pub async fn fader_level(&mut self, channel: u16) -> Result<i32, Box<dyn Error>> {
