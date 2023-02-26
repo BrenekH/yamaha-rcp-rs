@@ -1,11 +1,8 @@
 use std::error::Error;
 use std::str::FromStr;
-use tokio::io::AsyncReadExt;
-use tokio::io::AsyncWriteExt;
-use tokio::net::tcp::OwnedWriteHalf;
-use tokio::net::TcpStream;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::Receiver;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
+use tokio::sync::{mpsc, mpsc::Receiver};
 use tokio::time;
 
 #[derive(Debug)]
