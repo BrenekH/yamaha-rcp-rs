@@ -78,17 +78,21 @@ impl Mixer {
                 match reader.read(&mut buffer).await {
                     Ok(_) => {
                         for ele in buffer {
-                            if ele == 0xA {
-                                let result = std::str::from_utf8(&line).unwrap();
+                            match ele {
+                                0xA => {
+                                    let result = std::str::from_utf8(&line).unwrap();
+                                    println!("Received: {result}");
 
-                                if result.starts_with("ERROR") || result.starts_with("OK") {
-                                    // Send line to channel
-                                    tx.send(result.to_owned()).await.unwrap();
+                                    if result.starts_with("ERROR") || result.starts_with("OK") {
+                                        println!("Sending: {result}");
+                                        tx.send(result.to_owned()).await.unwrap();
+                                    } else {
+                                        println!("Dropping: {result}");
+                                    }
+
+                                    line.clear();
                                 }
-
-                                line.clear();
-                            } else {
-                                line.push(ele);
+                                _ => line.push(ele),
                             }
                         }
                     }
@@ -111,16 +115,16 @@ impl Mixer {
         self.debug = d;
     }
 
-    async fn send_command(&mut self, cmd: String) -> Result<String, Box<dyn Error>> {
+    async fn send_command(&mut self, mut cmd: String) -> Result<String, Box<dyn Error>> {
+        cmd.push('\n');
+
         if self.debug {
             println!("Sending command: {cmd}");
         }
 
         self.stream_writer.write_all(cmd.as_bytes()).await?;
 
-        let response = self.recv_channel.recv().await;
-
-        match response {
+        match self.recv_channel.recv().await {
             Some(v) => {
                 if v.starts_with("ERROR") {
                     return Err(Box::new(RCPError {
@@ -144,36 +148,15 @@ impl Mixer {
 
     pub async fn fader_level(&mut self, channel: u16) -> Result<i32, Box<dyn Error>> {
         let response = self
-            .send_command(format!("get MIXER:Current/InCh/Fader/Level {channel} 0\n"))
+            .send_command(format!("get MIXER:Current/InCh/Fader/Level {channel} 0"))
             .await?;
-        let response = response.replace("\0", "");
 
-        if response.starts_with("ERROR") {
-            return Err(Box::new(RCPError { message: response }));
+        match response.split(" ").last() {
+            Some(v) => Ok(v.parse::<i32>()?),
+            None => Err(Box::new(RCPError {
+                message: "Couldn't find the last item".to_owned(),
+            })),
         }
-
-        let split = response.split("\n");
-        let mut response_val = 0;
-        for item in split {
-            if !item.starts_with("OK") {
-                continue;
-            }
-
-            let opt = item.split(" ").last();
-            if opt.is_none() {
-                return Err(Box::new(RCPError {
-                    message: "Couldn't find the last item".to_owned(),
-                }));
-            }
-
-            // The following unwrap call should be safe because of the above if statement checking
-            // the Option's value
-            response_val = opt.unwrap().parse()?;
-
-            break;
-        }
-
-        Ok(response_val)
     }
 
     pub async fn set_fader_level(
@@ -181,16 +164,10 @@ impl Mixer {
         channel: u16,
         value: i32,
     ) -> Result<(), Box<dyn Error>> {
-        let response = self
-            .send_command(format!(
-                "set MIXER:Current/InCh/Fader/Level {channel} 0 {value}\n"
-            ))
-            .await?;
-        let response = response.replace("\0", "");
-
-        if response.starts_with("ERROR") {
-            return Err(Box::new(RCPError { message: response }));
-        }
+        self.send_command(format!(
+            "set MIXER:Current/InCh/Fader/Level {channel} 0 {value}"
+        ))
+        .await?;
 
         // Technically, this RCP call returns the actually set value, which we could capture and
         // return to the consumer.
@@ -199,88 +176,38 @@ impl Mixer {
 
     pub async fn muted(&mut self, channel: u16) -> Result<bool, Box<dyn Error>> {
         let response = self
-            .send_command(format!("get MIXER:Current/InCh/Fader/On {channel} 0\n"))
+            .send_command(format!("get MIXER:Current/InCh/Fader/On {channel} 0"))
             .await?;
-        let response = response.replace("\0", "");
 
-        if response.starts_with("ERROR") {
-            return Err(Box::new(RCPError { message: response }));
+        match response.split(" ").last() {
+            Some(v) => Ok(if v == "0" { false } else { true }),
+            None => Err(Box::new(RCPError {
+                message: "Could not get last item in list".to_owned(),
+            })),
         }
-
-        let split = response.split("\n");
-        let mut response_val = false;
-        for item in split {
-            if !item.starts_with("OK") {
-                continue;
-            }
-
-            let opt = item.split(" ").last();
-            if opt.is_none() {
-                return Err(Box::new(RCPError {
-                    message: "Could not get last item in list".to_owned(),
-                }));
-            }
-
-            // The following unwrap call should be safe because of the above if statement checking
-            // the Option's value
-            let opt_val = opt.unwrap();
-
-            response_val = if opt_val == "0" { false } else { true };
-
-            break;
-        }
-
-        Ok(response_val)
     }
 
     pub async fn set_muted(&mut self, channel: u16, muted: bool) -> Result<(), Box<dyn Error>> {
-        let response = self
-            .send_command(format!(
-                "set MIXER:Current/InCh/Fader/On {channel} 0 {}\n",
-                if muted { 0 } else { 1 }
-            ))
-            .await?;
-        let response = response.replace("\0", "");
-
-        if response.starts_with("ERROR") {
-            return Err(Box::new(RCPError { message: response }));
-        }
+        self.send_command(format!(
+            "set MIXER:Current/InCh/Fader/On {channel} 0 {}",
+            if muted { 0 } else { 1 }
+        ))
+        .await?;
 
         Ok(())
     }
 
     pub async fn color(&mut self, channel: u16) -> Result<LabelColor, Box<dyn Error>> {
         let response = self
-            .send_command(format!("get MIXER:Current/InCh/Label/Color {channel} 0\n"))
+            .send_command(format!("get MIXER:Current/InCh/Label/Color {channel} 0"))
             .await?;
-        let response = response.replace("\0", "");
 
-        if response.starts_with("ERROR") {
-            return Err(Box::new(RCPError { message: response }));
+        match response.split(" ").last() {
+            Some(v) => Ok(LabelColor::from_str(&(v.replace("\"", "")))?),
+            None => Err(Box::new(RCPError {
+                message: "could not get last item in list".to_string(),
+            })),
         }
-
-        let split = response.split("\n");
-        let mut response_val = "";
-        for item in split {
-            if !item.starts_with("OK") {
-                continue;
-            }
-
-            let opt = item.split(" ").last();
-            if opt.is_none() {
-                return Err(Box::new(RCPError {
-                    message: "could not get last item in list".to_string(),
-                }));
-            }
-
-            // The following unwrap call should be safe because of the above if statement checking
-            // the Option's value
-            response_val = opt.unwrap();
-
-            break;
-        }
-
-        Ok(LabelColor::from_str(&(response_val.replace("\"", ""))).unwrap())
     }
 
     pub async fn set_color(
@@ -288,17 +215,11 @@ impl Mixer {
         channel: u16,
         color: LabelColor,
     ) -> Result<(), Box<dyn Error>> {
-        let response = self
-            .send_command(format!(
-                "set MIXER:Current/InCh/Label/Color {channel} 0 \"{}\"\n",
-                color.to_string()
-            ))
-            .await?;
-        let response = response.replace("\0", "");
-
-        if response.starts_with("ERROR") {
-            return Err(Box::new(RCPError { message: response }));
-        }
+        self.send_command(format!(
+            "set MIXER:Current/InCh/Label/Color {channel} 0 \"{}\"",
+            color.to_string()
+        ))
+        .await?;
 
         Ok(())
     }
