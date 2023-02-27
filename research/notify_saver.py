@@ -2,7 +2,7 @@
 import socket
 from pathlib import Path
 
-addr, port = "localhost", 49280
+addr, port = "192.168.0.128", 49280
 
 out_file = Path.cwd() / "saved_notifies.txt"
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
