@@ -78,13 +78,9 @@ impl Mixer {
                             match ele {
                                 0xA => {
                                     let result = std::str::from_utf8(&line).unwrap();
-                                    println!("Received: {result}");
 
                                     if result.starts_with("ERROR") || result.starts_with("OK") {
-                                        println!("Sending: {result}");
                                         tx.send(result.to_owned()).await.unwrap();
-                                    } else {
-                                        println!("Dropping: {result}");
                                     }
 
                                     line.clear();
