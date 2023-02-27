@@ -13,6 +13,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{:?}", mixer.color(0).await?);
     mixer.set_color(1, LabelColor::Blue).await?;
 
+    println!("{}", mixer.label(0).await?);
+    mixer.set_label(1, "CHAN 2").await?;
+
     mixer.fader_level(1).await?;
     // mixer.fade(1, 10_00, -138_00, 10_000).await?;
     // time::sleep(time::Duration::from_secs(1)).await;

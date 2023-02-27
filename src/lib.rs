@@ -217,6 +217,48 @@ impl Mixer {
         Ok(())
     }
 
+    pub async fn label(&mut self, channel: u16) -> Result<String, Box<dyn Error>> {
+        let response = self
+            .send_command(format!("get MIXER:Current/InCh/Label/Name {channel} 0"))
+            .await?;
+
+        let mut resp_vec = Vec::new();
+        let mut looking = false;
+        for fragment in response.split(" ") {
+            if !looking && fragment.starts_with("\"") && fragment.ends_with("\"") {
+                resp_vec.push(fragment[1..fragment.len()-1].to_owned());
+                break;
+            }
+
+            if fragment.starts_with("\"") && !looking {
+                looking = true;
+                resp_vec.push(fragment[1..fragment.len()].to_owned());
+                continue;
+            }
+
+            if fragment.ends_with("\"") && looking {
+                resp_vec.push(fragment[0..fragment.len()-1].to_owned());
+                break;
+            }
+
+            if looking {
+                resp_vec.push(fragment.to_owned());
+            }
+        }
+        let label = resp_vec.join(" ");
+
+        Ok(label)
+    }
+
+    pub async fn set_label(&mut self, channel: u16, label: &str) -> Result<(), Box<dyn Error>> {
+        self.send_command(format!(
+            "set MIXER:Current/InCh/Label/Name {channel} 0 \"{label}\""
+        ))
+        .await?;
+
+        Ok(())
+    }
+
     pub async fn fade(
         &mut self,
         channel: u16,
