@@ -1,4 +1,9 @@
+// We use an underscore to make our decibel values more readable, which
+// Clippy by default does not agree with.
+#![allow(clippy::inconsistent_digit_grouping)]
+
 use std::error::Error;
+use std::fmt::Display;
 use std::str::FromStr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
@@ -17,9 +22,9 @@ pub enum LabelColor {
     Green,
 }
 
-impl LabelColor {
-    pub fn to_string(&self) -> String {
-        match self {
+impl Display for LabelColor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
             Self::Purple => "Purple",
             Self::Pink => "Pink",
             Self::Red => "Red",
@@ -28,8 +33,7 @@ impl LabelColor {
             Self::Blue => "Blue",
             Self::SkyBlue => "SkyBlue",
             Self::Green => "Green",
-        }
-        .to_string()
+        })
     }
 }
 
@@ -120,9 +124,9 @@ impl Mixer {
         match self.recv_channel.recv().await {
             Some(v) => {
                 if v.starts_with("ERROR") {
-                    return Err(Box::new(RCPError {
-                        message: v.to_owned(),
-                    }));
+                    Err(Box::new(RCPError {
+                        message: v,
+                    }))
                 } else if v.starts_with("OK") {
                     return Ok(v);
                 } else {
@@ -132,9 +136,9 @@ impl Mixer {
                 }
             }
             None => {
-                return Err(Box::new(RCPError {
+                Err(Box::new(RCPError {
                     message: "closed channel from reader task".to_owned(),
-                }));
+                }))
             }
         }
     }
@@ -144,7 +148,7 @@ impl Mixer {
             .send_command(format!("get MIXER:Current/InCh/Fader/Level {channel} 0"))
             .await?;
 
-        match response.split(" ").last() {
+        match response.split(' ').last() {
             Some(v) => Ok(v.parse::<i32>()?),
             None => Err(Box::new(RCPError {
                 message: "Couldn't find the last item".to_owned(),
@@ -172,8 +176,8 @@ impl Mixer {
             .send_command(format!("get MIXER:Current/InCh/Fader/On {channel} 0"))
             .await?;
 
-        match response.split(" ").last() {
-            Some(v) => Ok(if v == "0" { false } else { true }),
+        match response.split(' ').last() {
+            Some(v) => Ok(v != "0"),
             None => Err(Box::new(RCPError {
                 message: "Could not get last item in list".to_owned(),
             })),
@@ -195,8 +199,8 @@ impl Mixer {
             .send_command(format!("get MIXER:Current/InCh/Label/Color {channel} 0"))
             .await?;
 
-        match response.split(" ").last() {
-            Some(v) => Ok(LabelColor::from_str(&(v.replace("\"", "")))?),
+        match response.split(' ').last() {
+            Some(v) => Ok(LabelColor::from_str(&(v.replace('\"', "")))?),
             None => Err(Box::new(RCPError {
                 message: "could not get last item in list".to_string(),
             })),
@@ -210,7 +214,7 @@ impl Mixer {
     ) -> Result<(), Box<dyn Error>> {
         self.send_command(format!(
             "set MIXER:Current/InCh/Label/Color {channel} 0 \"{}\"",
-            color.to_string()
+            color
         ))
         .await?;
 
@@ -224,19 +228,19 @@ impl Mixer {
 
         let mut resp_vec = Vec::new();
         let mut looking = false;
-        for fragment in response.split(" ") {
-            if !looking && fragment.starts_with("\"") && fragment.ends_with("\"") {
+        for fragment in response.split(' ') {
+            if !looking && fragment.starts_with('\"') && fragment.ends_with('\"') {
                 resp_vec.push(fragment[1..fragment.len()-1].to_owned());
                 break;
             }
 
-            if fragment.starts_with("\"") && !looking {
+            if fragment.starts_with('\"') && !looking {
                 looking = true;
                 resp_vec.push(fragment[1..fragment.len()].to_owned());
                 continue;
             }
 
-            if fragment.ends_with("\"") && looking {
+            if fragment.ends_with('\"') && looking {
                 resp_vec.push(fragment[0..fragment.len()-1].to_owned());
                 break;
             }

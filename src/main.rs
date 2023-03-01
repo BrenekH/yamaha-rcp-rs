@@ -1,3 +1,5 @@
+#![allow(clippy::inconsistent_digit_grouping)]
+
 use futures::future;
 use tokio::time;
 
