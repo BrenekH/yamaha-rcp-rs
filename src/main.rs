@@ -1,3 +1,5 @@
+// We use an underscore to make our decibel values more readable, which
+// Clippy by default does not agree with.
 #![allow(clippy::inconsistent_digit_grouping)]
 
 use futures::future;
