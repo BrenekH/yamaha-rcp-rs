@@ -1,1 +1,0 @@
-Does the random 0 refer to the input bank?
