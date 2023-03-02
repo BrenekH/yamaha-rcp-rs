@@ -24,16 +24,20 @@ pub enum LabelColor {
 
 impl Display for LabelColor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            Self::Purple => "Purple",
-            Self::Pink => "Pink",
-            Self::Red => "Red",
-            Self::Orange => "Orange",
-            Self::Yellow => "Yellow",
-            Self::Blue => "Blue",
-            Self::SkyBlue => "SkyBlue",
-            Self::Green => "Green",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Purple => "Purple",
+                Self::Pink => "Pink",
+                Self::Red => "Red",
+                Self::Orange => "Orange",
+                Self::Yellow => "Yellow",
+                Self::Blue => "Blue",
+                Self::SkyBlue => "SkyBlue",
+                Self::Green => "Green",
+            }
+        )
     }
 }
 
@@ -124,9 +128,7 @@ impl Mixer {
         match self.recv_channel.recv().await {
             Some(v) => {
                 if v.starts_with("ERROR") {
-                    Err(Box::new(RCPError {
-                        message: v,
-                    }))
+                    Err(Box::new(RCPError { message: v }))
                 } else if v.starts_with("OK") {
                     return Ok(v);
                 } else {
@@ -135,18 +137,25 @@ impl Mixer {
                     }));
                 }
             }
-            None => {
-                Err(Box::new(RCPError {
-                    message: "closed channel from reader task".to_owned(),
-                }))
-            }
+            None => Err(Box::new(RCPError {
+                message: "closed channel from reader task".to_owned(),
+            })),
         }
     }
 
-    pub async fn fader_level(&mut self, channel: u16) -> Result<i32, Box<dyn Error>> {
-        let response = self
-            .send_command(format!("get MIXER:Current/InCh/Fader/Level {channel} 0"))
-            .await?;
+    async fn request_bool(&mut self, cmd: String) -> Result<bool, Box<dyn Error>> {
+        let response = self.send_command(cmd).await?;
+
+        match response.split(' ').last() {
+            Some(v) => Ok(v != "0"),
+            None => Err(Box::new(RCPError {
+                message: "Could not get last item in list".to_owned(),
+            })),
+        }
+    }
+
+    async fn request_int(&mut self, cmd: String) -> Result<i32, Box<dyn Error>> {
+        let response = self.send_command(cmd).await?;
 
         match response.split(' ').last() {
             Some(v) => Ok(v.parse::<i32>()?),
@@ -154,6 +163,42 @@ impl Mixer {
                 message: "Couldn't find the last item".to_owned(),
             })),
         }
+    }
+
+    async fn request_string(&mut self, cmd: String) -> Result<String, Box<dyn Error>> {
+        let response = self.send_command(cmd).await?;
+
+        let mut resp_vec = Vec::new();
+        let mut looking = false;
+        for fragment in response.split(' ') {
+            if !looking && fragment.starts_with('\"') && fragment.ends_with('\"') {
+                resp_vec.push(fragment[1..fragment.len() - 1].to_owned());
+                break;
+            }
+
+            if fragment.starts_with('\"') && !looking {
+                looking = true;
+                resp_vec.push(fragment[1..fragment.len()].to_owned());
+                continue;
+            }
+
+            if fragment.ends_with('\"') && looking {
+                resp_vec.push(fragment[0..fragment.len() - 1].to_owned());
+                break;
+            }
+
+            if looking {
+                resp_vec.push(fragment.to_owned());
+            }
+        }
+        let label = resp_vec.join(" ");
+
+        Ok(label)
+    }
+
+    pub async fn fader_level(&mut self, channel: u16) -> Result<i32, Box<dyn Error>> {
+        self.request_int(format!("get MIXER:Current/InCh/Fader/Level {channel} 0"))
+            .await
     }
 
     pub async fn set_fader_level(
@@ -172,16 +217,8 @@ impl Mixer {
     }
 
     pub async fn muted(&mut self, channel: u16) -> Result<bool, Box<dyn Error>> {
-        let response = self
-            .send_command(format!("get MIXER:Current/InCh/Fader/On {channel} 0"))
-            .await?;
-
-        match response.split(' ').last() {
-            Some(v) => Ok(v != "0"),
-            None => Err(Box::new(RCPError {
-                message: "Could not get last item in list".to_owned(),
-            })),
-        }
+        self.request_bool(format!("get MIXER:Current/InCh/Fader/On {channel} 0"))
+            .await
     }
 
     pub async fn set_muted(&mut self, channel: u16, muted: bool) -> Result<(), Box<dyn Error>> {
@@ -222,36 +259,8 @@ impl Mixer {
     }
 
     pub async fn label(&mut self, channel: u16) -> Result<String, Box<dyn Error>> {
-        let response = self
-            .send_command(format!("get MIXER:Current/InCh/Label/Name {channel} 0"))
-            .await?;
-
-        let mut resp_vec = Vec::new();
-        let mut looking = false;
-        for fragment in response.split(' ') {
-            if !looking && fragment.starts_with('\"') && fragment.ends_with('\"') {
-                resp_vec.push(fragment[1..fragment.len()-1].to_owned());
-                break;
-            }
-
-            if fragment.starts_with('\"') && !looking {
-                looking = true;
-                resp_vec.push(fragment[1..fragment.len()].to_owned());
-                continue;
-            }
-
-            if fragment.ends_with('\"') && looking {
-                resp_vec.push(fragment[0..fragment.len()-1].to_owned());
-                break;
-            }
-
-            if looking {
-                resp_vec.push(fragment.to_owned());
-            }
-        }
-        let label = resp_vec.join(" ");
-
-        Ok(label)
+        self.request_string(format!("get MIXER:Current/InCh/Label/Name {channel} 0"))
+            .await
     }
 
     pub async fn set_label(&mut self, channel: u16, label: &str) -> Result<(), Box<dyn Error>> {
