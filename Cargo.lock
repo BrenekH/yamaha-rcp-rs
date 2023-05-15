@@ -1289,6 +1289,7 @@ dependencies = [
  "anyhow",
  "futures",
  "obws",
+ "serde",
  "time",
  "tokio",
 ]

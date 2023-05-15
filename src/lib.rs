@@ -5,12 +5,13 @@
 use std::error::Error;
 use std::fmt::Display;
 use std::str::FromStr;
+use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
 use tokio::sync::{mpsc, mpsc::Receiver};
 use tokio::time;
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum LabelColor {
     Purple,
     Pink,
