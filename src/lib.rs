@@ -2,10 +2,11 @@
 // Clippy by default does not agree with.
 #![allow(clippy::inconsistent_digit_grouping)]
 
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::Display;
+use std::net::SocketAddr;
 use std::str::FromStr;
-use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
 use tokio::sync::{mpsc, mpsc::Receiver};
@@ -72,7 +73,14 @@ pub struct Mixer {
 impl Mixer {
     pub async fn new(addr: &str) -> Result<Self, Box<dyn Error>> {
         let (tx, rx) = mpsc::channel::<String>(16);
-        let stream = TcpStream::connect(addr).await?;
+
+        let std_tcp_sock = std::net::TcpStream::connect_timeout(
+            &addr.parse::<SocketAddr>()?,
+            time::Duration::from_secs(3),
+        )?;
+        std_tcp_sock.set_nonblocking(true)?;
+
+        let stream = TcpStream::from_std(std_tcp_sock)?;
         let (mut reader, writer) = stream.into_split();
 
         tokio::spawn(async move {
