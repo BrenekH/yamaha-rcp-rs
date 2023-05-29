@@ -3,7 +3,6 @@
 #![allow(clippy::inconsistent_digit_grouping)]
 
 use serde::{Deserialize, Serialize};
-use std::error::Error;
 use std::fmt::Display;
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -11,6 +10,20 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
 use tokio::sync::{mpsc, mpsc::Receiver};
 use tokio::time;
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("network error: {0}")]
+    NetworkError(#[from] std::io::Error),
+    #[error("invalid network address: {0}")]
+    AddrParseError(#[from] std::net::AddrParseError),
+    #[error("Yamaha Remote Control Protocol error: {0}")]
+    RCPError(String),
+    #[error("could not parse console response: {0}")]
+    RCPParseError(#[from] Box<dyn std::error::Error>),
+    #[error("{0}")]
+    LabelColorParseError(String),
+}
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub enum LabelColor {
@@ -44,7 +57,7 @@ impl Display for LabelColor {
 }
 
 impl FromStr for LabelColor {
-    type Err = String;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -56,7 +69,9 @@ impl FromStr for LabelColor {
             "Blue" => Ok(Self::Blue),
             "SkyBlue" => Ok(Self::SkyBlue),
             "Green" => Ok(Self::Green),
-            _ => Err(format!("unknown LabelColor descriptor: {s}")),
+            _ => Err(Error::LabelColorParseError(format!(
+                "unknown LabelColor descriptor: {s}"
+            ))),
         }
     }
 }
@@ -71,7 +86,7 @@ pub struct Mixer {
 }
 
 impl Mixer {
-    pub async fn new(addr: &str) -> Result<Self, Box<dyn Error>> {
+    pub async fn new(addr: &str) -> Result<Self, Error> {
         let (tx, rx) = mpsc::channel::<String>(16);
 
         let std_tcp_sock = std::net::TcpStream::connect_timeout(
@@ -125,7 +140,7 @@ impl Mixer {
         self.debug = d;
     }
 
-    async fn send_command(&mut self, mut cmd: String) -> Result<String, Box<dyn Error>> {
+    async fn send_command(&mut self, mut cmd: String) -> Result<String, Error> {
         cmd.push('\n');
 
         if self.debug {
@@ -137,44 +152,40 @@ impl Mixer {
         match self.recv_channel.recv().await {
             Some(v) => {
                 if v.starts_with("ERROR") {
-                    Err(Box::new(RCPError { message: v }))
+                    Err(Error::RCPError(v))
                 } else if v.starts_with("OK") {
                     return Ok(v);
                 } else {
-                    return Err(Box::new(RCPError {
-                        message: format!("received message did not start with ERROR or OK: {v}"),
-                    }));
+                    return Err(Error::RCPError(format!(
+                        "received message did not start with ERROR or OK: {v}"
+                    )));
                 }
             }
-            None => Err(Box::new(RCPError {
-                message: "closed channel from reader task".to_owned(),
-            })),
+            None => Err(Error::RCPError("closed channel from reader task".into())),
         }
     }
 
-    async fn request_bool(&mut self, cmd: String) -> Result<bool, Box<dyn Error>> {
+    async fn request_bool(&mut self, cmd: String) -> Result<bool, Error> {
         let response = self.send_command(cmd).await?;
 
         match response.split(' ').last() {
             Some(v) => Ok(v != "0"),
-            None => Err(Box::new(RCPError {
-                message: "Could not get last item in list".to_owned(),
-            })),
+            None => Err(Error::RCPError("Could not get last item in list".into())),
         }
     }
 
-    async fn request_int(&mut self, cmd: String) -> Result<i32, Box<dyn Error>> {
+    async fn request_int(&mut self, cmd: String) -> Result<i32, Error> {
         let response = self.send_command(cmd).await?;
 
         match response.split(' ').last() {
-            Some(v) => Ok(v.parse::<i32>()?),
-            None => Err(Box::new(RCPError {
-                message: "Couldn't find the last item".to_owned(),
-            })),
+            Some(v) => Ok(v
+                .parse::<i32>()
+                .map_err(|e| Error::RCPParseError(Box::new(e)))?),
+            None => Err(Error::RCPError("Couldn't find the last item".into())),
         }
     }
 
-    async fn request_string(&mut self, cmd: String) -> Result<String, Box<dyn Error>> {
+    async fn request_string(&mut self, cmd: String) -> Result<String, Error> {
         let response = self.send_command(cmd).await?;
 
         let mut resp_vec = Vec::new();
@@ -205,16 +216,12 @@ impl Mixer {
         Ok(label)
     }
 
-    pub async fn fader_level(&mut self, channel: u16) -> Result<i32, Box<dyn Error>> {
+    pub async fn fader_level(&mut self, channel: u16) -> Result<i32, Error> {
         self.request_int(format!("get MIXER:Current/InCh/Fader/Level {channel} 0"))
             .await
     }
 
-    pub async fn set_fader_level(
-        &mut self,
-        channel: u16,
-        value: i32,
-    ) -> Result<(), Box<dyn Error>> {
+    pub async fn set_fader_level(&mut self, channel: u16, value: i32) -> Result<(), Error> {
         self.send_command(format!(
             "set MIXER:Current/InCh/Fader/Level {channel} 0 {value}"
         ))
@@ -225,12 +232,12 @@ impl Mixer {
         Ok(())
     }
 
-    pub async fn muted(&mut self, channel: u16) -> Result<bool, Box<dyn Error>> {
+    pub async fn muted(&mut self, channel: u16) -> Result<bool, Error> {
         self.request_bool(format!("get MIXER:Current/InCh/Fader/On {channel} 0"))
             .await
     }
 
-    pub async fn set_muted(&mut self, channel: u16, muted: bool) -> Result<(), Box<dyn Error>> {
+    pub async fn set_muted(&mut self, channel: u16, muted: bool) -> Result<(), Error> {
         self.send_command(format!(
             "set MIXER:Current/InCh/Fader/On {channel} 0 {}",
             if muted { 0 } else { 1 }
@@ -240,24 +247,18 @@ impl Mixer {
         Ok(())
     }
 
-    pub async fn color(&mut self, channel: u16) -> Result<LabelColor, Box<dyn Error>> {
+    pub async fn color(&mut self, channel: u16) -> Result<LabelColor, Error> {
         let response = self
             .send_command(format!("get MIXER:Current/InCh/Label/Color {channel} 0"))
             .await?;
 
         match response.split(' ').last() {
-            Some(v) => Ok(LabelColor::from_str(&(v.replace('\"', "")))?),
-            None => Err(Box::new(RCPError {
-                message: "could not get last item in list".to_string(),
-            })),
+            Some(v) => Ok(v.replace('\"', "").parse()?),
+            None => Err(Error::RCPError("could not get last item in list".into())),
         }
     }
 
-    pub async fn set_color(
-        &mut self,
-        channel: u16,
-        color: LabelColor,
-    ) -> Result<(), Box<dyn Error>> {
+    pub async fn set_color(&mut self, channel: u16, color: LabelColor) -> Result<(), Error> {
         self.send_command(format!(
             "set MIXER:Current/InCh/Label/Color {channel} 0 \"{}\"",
             color
@@ -267,12 +268,12 @@ impl Mixer {
         Ok(())
     }
 
-    pub async fn label(&mut self, channel: u16) -> Result<String, Box<dyn Error>> {
+    pub async fn label(&mut self, channel: u16) -> Result<String, Error> {
         self.request_string(format!("get MIXER:Current/InCh/Label/Name {channel} 0"))
             .await
     }
 
-    pub async fn set_label(&mut self, channel: u16, label: &str) -> Result<(), Box<dyn Error>> {
+    pub async fn set_label(&mut self, channel: u16, label: &str) -> Result<(), Error> {
         self.send_command(format!(
             "set MIXER:Current/InCh/Label/Name {channel} 0 \"{label}\""
         ))
@@ -287,7 +288,7 @@ impl Mixer {
         mut initial_value: i32,
         mut final_value: i32,
         duration_ms: u64,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), Error> {
         initial_value = initial_value.clamp(self.min_fader_val, self.max_fader_val);
         final_value = final_value.clamp(self.min_fader_val, self.max_fader_val);
 
@@ -320,22 +321,5 @@ impl Mixer {
         }
 
         Ok(())
-    }
-}
-
-#[derive(Debug)]
-struct RCPError {
-    message: String,
-}
-
-impl std::fmt::Display for RCPError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl Error for RCPError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
     }
 }
