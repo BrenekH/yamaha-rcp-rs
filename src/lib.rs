@@ -76,6 +76,24 @@ impl FromStr for LabelColor {
     }
 }
 
+pub enum SceneList {
+    A,
+    B
+}
+
+impl Display for SceneList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::A => "scene_a",
+                Self::B => "scene_b"
+            }
+        )
+    }
+}
+
 pub struct Mixer {
     stream_writer: OwnedWriteHalf,
     recv_channel: Receiver<String>,
@@ -279,6 +297,11 @@ impl Mixer {
         ))
         .await?;
 
+        Ok(())
+    }
+
+    pub async fn recall_scene(&mut self, scene_list: SceneList, scene_number: u8) -> Result<(), Error> {
+        self.send_command(format!("ssrecall_ex {scene_list} {scene_number}")).await?;
         Ok(())
     }
 
