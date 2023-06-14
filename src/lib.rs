@@ -76,7 +76,7 @@ impl FromStr for LabelColor {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub enum SceneList {
     A,
     B
