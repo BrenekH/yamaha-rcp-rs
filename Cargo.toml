@@ -6,10 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.69"
 futures = "0.3.26"
-obws = "0.10.0"
-serde = "1.0.163"
+serde = { version = "1.0.163", features = ["derive"] }
 thiserror = "1.0.40"
 time = "0.3.15"
 tokio = { version = "1.25.0", features = ["full"] }
