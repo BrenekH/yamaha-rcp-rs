@@ -23,6 +23,8 @@ pub enum Error {
     RCPParseError(#[from] Box<dyn std::error::Error>),
     #[error("{0}")]
     LabelColorParseError(String),
+    #[error("{0}")]
+    SceneListParseError(String),
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -92,6 +94,20 @@ impl Display for SceneList {
                 Self::B => "scene_b"
             }
         )
+    }
+}
+
+impl FromStr for SceneList {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match &s.to_lowercase()[..] {
+            "a" => Ok(Self::A),
+            "b" => Ok(Self::B),
+            _ => Err(Error::SceneListParseError(format!(
+                "unknown SceneList descriptor: {s}"
+            ))),
+        }
     }
 }
 
