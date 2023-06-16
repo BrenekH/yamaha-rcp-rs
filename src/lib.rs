@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::net::SocketAddr;
 use std::str::FromStr;
+use log::debug;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
 use tokio::sync::{mpsc, mpsc::Receiver};
@@ -117,7 +118,6 @@ pub struct Mixer {
     max_fader_val: i32,
     min_fader_val: i32,
     neg_inf_val: i32,
-    debug: bool,
 }
 
 impl Mixer {
@@ -167,20 +167,13 @@ impl Mixer {
             max_fader_val: 10_00,
             min_fader_val: -138_00,
             neg_inf_val: -327_68,
-            debug: false,
         })
-    }
-
-    pub fn set_debug(&mut self, d: bool) {
-        self.debug = d;
     }
 
     async fn send_command(&mut self, mut cmd: String) -> Result<String, Error> {
         cmd.push('\n');
 
-        if self.debug {
-            println!("Sending command: {cmd}");
-        }
+        debug!("Sending command: {cmd}");
 
         self.stream_writer.write_all(cmd.as_bytes()).await?;
 
@@ -342,9 +335,7 @@ impl Mixer {
             interval.tick().await;
 
             self.set_fader_level(channel, current_value).await?;
-            if self.debug {
-                println!("Set channel {channel} to {current_value}");
-            }
+            debug!("Set channel {channel} to {current_value}");
 
             current_value += step_delta;
         }
@@ -356,9 +347,7 @@ impl Mixer {
         };
 
         self.set_fader_level(channel, final_value).await?;
-        if self.debug {
-            println!("Set channel {channel} to {final_value}");
-        }
+        debug!("Set channel {channel} to {final_value}");
 
         Ok(())
     }

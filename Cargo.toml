@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 futures = "0.3.26"
+log = "0.4.19"
 serde = { version = "1.0.163", features = ["derive"] }
 thiserror = "1.0.40"
 time = "0.3.15"
