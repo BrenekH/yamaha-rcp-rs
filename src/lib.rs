@@ -10,9 +10,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
-use tokio::sync::mpsc::Sender;
-use tokio::sync::Mutex;
-use tokio::sync::{mpsc, mpsc::Receiver};
+use tokio::sync::{mpsc, mpsc::Receiver, Mutex};
 use tokio::time;
 
 #[derive(thiserror::Error, Debug)]
@@ -193,30 +191,48 @@ impl Mixer {
         })
     }
 
-    async fn send_command(&mut self, mut cmd: String) -> Result<String, Error> {
+    async fn send_command(&self, mut cmd: String) -> Result<String, Error> {
         cmd.push('\n');
 
         debug!("Sending command: {cmd}");
 
-        self.stream_writer.write_all(cmd.as_bytes()).await?;
+        // Extract a connection from the connection pool
+        let mut conn: Connection;
+        {
+            let mut conns = self.connections.lock().await;
+            conn = match conns.pop() {
+                Some(c) => c,
+                None => self.new_connection().await?,
+            };
+        }
 
-        match self.recv_channel.recv().await {
+        conn.writer.write_all(cmd.as_bytes()).await?;
+
+        let result = match conn.recv_channel.recv().await {
             Some(v) => {
                 if v.starts_with("ERROR") {
                     Err(Error::RCPError(v))
                 } else if v.starts_with("OK") {
-                    return Ok(v);
+                    Ok(v)
                 } else {
-                    return Err(Error::RCPError(format!(
+                    Err(Error::RCPError(format!(
                         "received message did not start with ERROR or OK: {v}"
-                    )));
+                    )))
                 }
             }
             None => Err(Error::RCPError("closed channel from reader task".into())),
+        };
+
+        // Add the connection we used back into the pool
+        {
+            let mut conns = self.connections.lock().await;
+            conns.push(conn);
         }
+
+        result
     }
 
-    async fn request_bool(&mut self, cmd: String) -> Result<bool, Error> {
+    async fn request_bool(&self, cmd: String) -> Result<bool, Error> {
         let response = self.send_command(cmd).await?;
 
         match response.split(' ').last() {
@@ -225,7 +241,7 @@ impl Mixer {
         }
     }
 
-    async fn request_int(&mut self, cmd: String) -> Result<i32, Error> {
+    async fn request_int(&self, cmd: String) -> Result<i32, Error> {
         let response = self.send_command(cmd).await?;
 
         match response.split(' ').last() {
@@ -236,7 +252,7 @@ impl Mixer {
         }
     }
 
-    async fn request_string(&mut self, cmd: String) -> Result<String, Error> {
+    async fn request_string(&self, cmd: String) -> Result<String, Error> {
         let response = self.send_command(cmd).await?;
 
         let mut resp_vec = Vec::new();
@@ -267,12 +283,12 @@ impl Mixer {
         Ok(label)
     }
 
-    pub async fn fader_level(&mut self, channel: u16) -> Result<i32, Error> {
+    pub async fn fader_level(&self, channel: u16) -> Result<i32, Error> {
         self.request_int(format!("get MIXER:Current/InCh/Fader/Level {channel} 0"))
             .await
     }
 
-    pub async fn set_fader_level(&mut self, channel: u16, value: i32) -> Result<(), Error> {
+    pub async fn set_fader_level(&self, channel: u16, value: i32) -> Result<(), Error> {
         self.send_command(format!(
             "set MIXER:Current/InCh/Fader/Level {channel} 0 {value}"
         ))
@@ -283,12 +299,12 @@ impl Mixer {
         Ok(())
     }
 
-    pub async fn muted(&mut self, channel: u16) -> Result<bool, Error> {
+    pub async fn muted(&self, channel: u16) -> Result<bool, Error> {
         self.request_bool(format!("get MIXER:Current/InCh/Fader/On {channel} 0"))
             .await
     }
 
-    pub async fn set_muted(&mut self, channel: u16, muted: bool) -> Result<(), Error> {
+    pub async fn set_muted(&self, channel: u16, muted: bool) -> Result<(), Error> {
         self.send_command(format!(
             "set MIXER:Current/InCh/Fader/On {channel} 0 {}",
             if muted { 0 } else { 1 }
@@ -298,7 +314,7 @@ impl Mixer {
         Ok(())
     }
 
-    pub async fn color(&mut self, channel: u16) -> Result<LabelColor, Error> {
+    pub async fn color(&self, channel: u16) -> Result<LabelColor, Error> {
         let response = self
             .send_command(format!("get MIXER:Current/InCh/Label/Color {channel} 0"))
             .await?;
@@ -309,7 +325,7 @@ impl Mixer {
         }
     }
 
-    pub async fn set_color(&mut self, channel: u16, color: LabelColor) -> Result<(), Error> {
+    pub async fn set_color(&self, channel: u16, color: LabelColor) -> Result<(), Error> {
         self.send_command(format!(
             "set MIXER:Current/InCh/Label/Color {channel} 0 \"{}\"",
             color
@@ -319,12 +335,12 @@ impl Mixer {
         Ok(())
     }
 
-    pub async fn label(&mut self, channel: u16) -> Result<String, Error> {
+    pub async fn label(&self, channel: u16) -> Result<String, Error> {
         self.request_string(format!("get MIXER:Current/InCh/Label/Name {channel} 0"))
             .await
     }
 
-    pub async fn set_label(&mut self, channel: u16, label: &str) -> Result<(), Error> {
+    pub async fn set_label(&self, channel: u16, label: &str) -> Result<(), Error> {
         self.send_command(format!(
             "set MIXER:Current/InCh/Label/Name {channel} 0 \"{label}\""
         ))
@@ -334,7 +350,7 @@ impl Mixer {
     }
 
     pub async fn recall_scene(
-        &mut self,
+        &self,
         scene_list: SceneList,
         scene_number: u8,
     ) -> Result<(), Error> {
@@ -344,7 +360,7 @@ impl Mixer {
     }
 
     pub async fn fade(
-        &mut self,
+        &self,
         channel: u16,
         mut initial_value: i32,
         mut final_value: i32,
