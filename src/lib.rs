@@ -2,13 +2,16 @@
 // Clippy by default does not agree with.
 #![allow(clippy::inconsistent_digit_grouping)]
 
+use log::debug;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::net::SocketAddr;
 use std::str::FromStr;
-use log::debug;
+use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
+use tokio::sync::mpsc::Sender;
+use tokio::sync::Mutex;
 use tokio::sync::{mpsc, mpsc::Receiver};
 use tokio::time;
 
@@ -82,7 +85,7 @@ impl FromStr for LabelColor {
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub enum SceneList {
     A,
-    B
+    B,
 }
 
 impl Display for SceneList {
@@ -92,7 +95,7 @@ impl Display for SceneList {
             "{}",
             match self {
                 Self::A => "scene_a",
-                Self::B => "scene_b"
+                Self::B => "scene_b",
             }
         )
     }
@@ -113,21 +116,44 @@ impl FromStr for SceneList {
 }
 
 pub struct Mixer {
-    stream_writer: OwnedWriteHalf,
-    recv_channel: Receiver<String>,
     max_fader_val: i32,
     min_fader_val: i32,
     neg_inf_val: i32,
+    socket_addr: SocketAddr,
+    connections: Arc<Mutex<Vec<Connection>>>,
+}
+
+struct Connection {
+    writer: OwnedWriteHalf,
+    recv_channel: Receiver<String>,
 }
 
 impl Mixer {
     pub async fn new(addr: &str) -> Result<Self, Error> {
+        let socket_addr: SocketAddr = addr.parse()?;
+
+        let mixer = Mixer {
+            max_fader_val: 10_00,
+            min_fader_val: -138_00,
+            neg_inf_val: -327_68,
+            socket_addr,
+            connections: Arc::new(Mutex::new(vec![])),
+        };
+
+        let initial_connection = mixer.new_connection().await?;
+        {
+            let mut connections = mixer.connections.lock().await;
+            connections.push(initial_connection);
+        }
+
+        Ok(mixer)
+    }
+
+    async fn new_connection(&self) -> Result<Connection, Error> {
         let (tx, rx) = mpsc::channel::<String>(16);
 
-        let std_tcp_sock = std::net::TcpStream::connect_timeout(
-            &addr.parse::<SocketAddr>()?,
-            time::Duration::from_secs(3),
-        )?;
+        let std_tcp_sock =
+            std::net::TcpStream::connect_timeout(&self.socket_addr, time::Duration::from_secs(3))?;
         std_tcp_sock.set_nonblocking(true)?;
 
         let stream = TcpStream::from_std(std_tcp_sock)?;
@@ -161,12 +187,9 @@ impl Mixer {
             }
         });
 
-        Ok(Mixer {
-            stream_writer: writer,
+        Ok(Connection {
+            writer,
             recv_channel: rx,
-            max_fader_val: 10_00,
-            min_fader_val: -138_00,
-            neg_inf_val: -327_68,
         })
     }
 
@@ -310,8 +333,13 @@ impl Mixer {
         Ok(())
     }
 
-    pub async fn recall_scene(&mut self, scene_list: SceneList, scene_number: u8) -> Result<(), Error> {
-        self.send_command(format!("ssrecall_ex {scene_list} {scene_number}")).await?;
+    pub async fn recall_scene(
+        &mut self,
+        scene_list: SceneList,
+        scene_number: u8,
+    ) -> Result<(), Error> {
+        self.send_command(format!("ssrecall_ex {scene_list} {scene_number}"))
+            .await?;
         Ok(())
     }
 
