@@ -113,7 +113,8 @@ impl FromStr for SceneList {
     }
 }
 
-pub struct Mixer {
+#[derive(Clone, Debug)]
+pub struct TFMixer {
     max_fader_val: i32,
     min_fader_val: i32,
     neg_inf_val: i32,
@@ -121,16 +122,17 @@ pub struct Mixer {
     connections: Arc<Mutex<Vec<Connection>>>,
 }
 
+#[derive(Debug)]
 struct Connection {
     writer: OwnedWriteHalf,
     recv_channel: Receiver<String>,
 }
 
-impl Mixer {
+impl TFMixer {
     pub async fn new(addr: &str) -> Result<Self, Error> {
         let socket_addr: SocketAddr = addr.parse()?;
 
-        let mixer = Mixer {
+        let mixer = TFMixer {
             max_fader_val: 10_00,
             min_fader_val: -138_00,
             neg_inf_val: -327_68,

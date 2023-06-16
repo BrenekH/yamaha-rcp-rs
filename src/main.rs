@@ -5,11 +5,11 @@
 use futures::future;
 use tokio::time;
 
-use yamaha_rcp_rs::{LabelColor, Mixer};
+use yamaha_rcp_rs::{LabelColor, TFMixer};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mixer = Mixer::new("192.168.0.128:49280").await?;
+    let mixer = TFMixer::new("192.168.0.128:49280").await?;
     println!("Connected to mixer!");
 
     println!("{:?}", mixer.color(0).await?);
@@ -41,6 +41,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     mixer.muted(0).await?;
     mixer.set_muted(0, true).await?;
+
+    time::sleep(time::Duration::from_secs(1)).await;
+    println!("Starting stress pattern");
+
+    let mut async_tasks = vec![];
+    for i in 0..15 {
+        let tf1 = mixer.clone();
+        async_tasks.push(async move {
+            tf1.set_fader_level(i, -40_00).await?;
+            time::sleep(time::Duration::from_millis((i * 500).into())).await;
+            tf1.fade(i.try_into().unwrap(), -40_00, 0_00, 3000).await?;
+            Ok::<(), yamaha_rcp_rs::Error>(())
+        });
+    }
+
+    let results = future::join_all(async_tasks).await;
+    for result in results {
+        result?;
+    }
 
     Ok(())
 }
