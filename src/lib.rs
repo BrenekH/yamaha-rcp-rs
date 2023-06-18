@@ -8,6 +8,7 @@ use std::fmt::Display;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
 use tokio::sync::{mpsc, mpsc::Receiver, Mutex};
@@ -120,6 +121,8 @@ pub struct TFMixer {
     neg_inf_val: i32,
     socket_addr: SocketAddr,
     connections: Arc<Mutex<Vec<Connection>>>,
+    num_connections: Arc<Mutex<u8>>,
+    connection_limit: u8,
 }
 
 #[derive(Debug)]
@@ -138,15 +141,23 @@ impl TFMixer {
             neg_inf_val: -327_68,
             socket_addr,
             connections: Arc::new(Mutex::new(vec![])),
+            num_connections: Arc::new(Mutex::new(8)),
+            connection_limit: 1,
         };
 
         let initial_connection = mixer.new_connection().await?;
         {
             let mut connections = mixer.connections.lock().await;
+            let mut num_conns = mixer.num_connections.lock().await;
             connections.push(initial_connection);
+            *num_conns += 1;
         }
 
         Ok(mixer)
+    }
+
+    pub fn set_connection_limit(&mut self, limit: u8) {
+        self.connection_limit = limit;
     }
 
     async fn new_connection(&self) -> Result<Connection, Error> {
@@ -198,13 +209,36 @@ impl TFMixer {
 
         debug!("Sending command: {cmd}");
 
-        // Extract a connection from the connection pool
+        // Extract a connection from the connection pool while observing the connection limit
         let mut conn: Connection;
         {
             let mut conns = self.connections.lock().await;
             conn = match conns.pop() {
                 Some(c) => c,
-                None => self.new_connection().await?,
+                None => {
+                    let mut num_conns = self.num_connections.lock().await;
+                    if *num_conns < self.connection_limit {
+                        *num_conns += 1;
+                        self.new_connection().await?
+                    } else {
+                        drop(num_conns);
+                        let existing_conn: Connection;
+                        loop {
+                            drop(conns);
+                            tokio::time::sleep(Duration::from_millis(10)).await;
+                            conns = self.connections.lock().await;
+                            match conns.pop() {
+                                Some(c) => {
+                                    existing_conn = c;
+                                    break;
+                                }
+                                None => {}
+                            }
+                        }
+
+                        existing_conn
+                    }
+                }
             };
         }
 
@@ -351,11 +385,7 @@ impl TFMixer {
         Ok(())
     }
 
-    pub async fn recall_scene(
-        &self,
-        scene_list: SceneList,
-        scene_number: u8,
-    ) -> Result<(), Error> {
+    pub async fn recall_scene(&self, scene_list: SceneList, scene_number: u8) -> Result<(), Error> {
         self.send_command(format!("ssrecall_ex {scene_list} {scene_number}"))
             .await?;
         Ok(())
