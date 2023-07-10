@@ -1,3 +1,29 @@
+#![allow(clippy::needless_doctest_main)]
+/*!
+# yamaha-rcp-rs
+
+Remote control of [Yamaha mixing consoles](https://usa.yamaha.com/products/proaudio/mixers/index.html)
+
+## Example
+
+```no_run
+use yamaha_rcp_rs::{Error, TFMixer};
+
+#[tokio::main]
+fn main() -> Result<(), Error> {
+    let mixer = TFMixer::new("192.168.0.128:49280")?;
+
+    // Set channel 1 to -10.00 dB
+    mixer.set_fader_level(0, -10_00).await?;
+}
+```
+
+## Extra Documentation
+
+The following is a personal collection of documentation on Yamaha's mixer control protocol since
+they don't provide any decent version of their own: [github.com/BrenekH/yamaha-rcp-docs](https://github.com/BrenekH/yamaha-rcp-docs#readme)
+*/
+
 // We use an underscore to make our decibel values more readable, which
 // Clippy by default does not agree with.
 #![allow(clippy::inconsistent_digit_grouping)]
@@ -14,6 +40,7 @@ use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
 use tokio::sync::{mpsc, mpsc::Receiver, Mutex};
 use tokio::time;
 
+/// Enumeration of errors that originate from `yamaha_rcp_rs`
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("network error: {0}")]
@@ -30,6 +57,7 @@ pub enum Error {
     SceneListParseError(String),
 }
 
+/// All possible colors that the TF1 console can use for a channel
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub enum LabelColor {
     Purple,
@@ -65,15 +93,15 @@ impl FromStr for LabelColor {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Purple" => Ok(Self::Purple),
-            "Pink" => Ok(Self::Pink),
-            "Red" => Ok(Self::Red),
-            "Orange" => Ok(Self::Orange),
-            "Yellow" => Ok(Self::Yellow),
-            "Blue" => Ok(Self::Blue),
-            "SkyBlue" => Ok(Self::SkyBlue),
-            "Green" => Ok(Self::Green),
+        match s.to_lowercase().as_str() {
+            "purple" => Ok(Self::Purple),
+            "pink" => Ok(Self::Pink),
+            "red" => Ok(Self::Red),
+            "orange" => Ok(Self::Orange),
+            "yellow" => Ok(Self::Yellow),
+            "blue" => Ok(Self::Blue),
+            "skyblue" => Ok(Self::SkyBlue),
+            "green" => Ok(Self::Green),
             _ => Err(Error::LabelColorParseError(format!(
                 "unknown LabelColor descriptor: {s}"
             ))),
@@ -81,6 +109,7 @@ impl FromStr for LabelColor {
     }
 }
 
+/// Possible scene lists that scenes may be stored in
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub enum SceneList {
     A,
@@ -104,7 +133,7 @@ impl FromStr for SceneList {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match &s.to_lowercase()[..] {
+        match s.to_lowercase().as_str() {
             "a" => Ok(Self::A),
             "b" => Ok(Self::B),
             _ => Err(Error::SceneListParseError(format!(
@@ -114,6 +143,9 @@ impl FromStr for SceneList {
     }
 }
 
+/// Main client structure for TF series mixing consoles
+///
+/// Construct using [TFMixer::new]
 #[derive(Clone, Debug)]
 pub struct TFMixer {
     max_fader_val: i32,
@@ -227,12 +259,9 @@ impl TFMixer {
                             drop(conns);
                             tokio::time::sleep(Duration::from_millis(10)).await;
                             conns = self.connections.lock().await;
-                            match conns.pop() {
-                                Some(c) => {
-                                    existing_conn = c;
-                                    break;
-                                }
-                                None => {}
+                            if let Some(c) = conns.pop() {
+                                existing_conn = c;
+                                break;
                             }
                         }
 

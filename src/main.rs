@@ -19,9 +19,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     mixer.set_label(1, "CHAN 2").await?;
 
     mixer.fader_level(1).await?;
-    // mixer.fade(1, 10_00, -138_00, 10_000).await?;
-    // time::sleep(time::Duration::from_secs(1)).await;
-    // mixer.fade(1, -138_00, 10_00, 1_000).await?;
 
     let chan1_fader = mixer.fade(1, 10_00, -40_00, 3_000);
     let chan2_fader = mixer.fade(2, -40_00, 10_00, 3_000);
@@ -46,12 +43,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting stress pattern");
 
     let mut async_tasks = vec![];
-    for i in 0..15 {
+    for i in 0..=15 {
         let tf1 = mixer.clone();
         async_tasks.push(async move {
             tf1.set_fader_level(i, -40_00).await?;
             time::sleep(time::Duration::from_millis((i * 500).into())).await;
-            tf1.fade(i.try_into().unwrap(), -40_00, 0_00, 3000).await?;
+            tf1.fade(i, -40_00, 10_00, 3000).await?;
+            tf1.fade(i, 10_00, -40_00, 3000).await?;
+            tf1.set_fader_level(i, -32800).await?;
             Ok::<(), yamaha_rcp_rs::Error>(())
         });
     }
