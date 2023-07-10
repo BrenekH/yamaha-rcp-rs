@@ -1,8 +1,22 @@
 #![allow(clippy::needless_doctest_main)]
 /*!
-# yamaha-rcp-rs
+# Yamaha Remote Control Protocol (Rust)
 
-Remote control of [Yamaha mixing consoles](https://usa.yamaha.com/products/proaudio/mixers/index.html)
+Remote control of [Yamaha mixing consoles](https://usa.yamaha.com/products/proaudio/mixers/index.html) using IP networking.
+
+## Disclaimer
+
+ > This library is mainly tested against the [Yamaha TF Series](https://usa.yamaha.com/products/proaudio/mixers/tf/index.html)
+ > of consoles, specifically the TF1.
+ > Fully tested compatibility of the
+ > [Rivage PM](https://usa.yamaha.com/products/proaudio/mixers/rivage_pm/index.html),
+ > [DM7](https://usa.yamaha.com/products/proaudio/mixers/dm7/index.html),
+ > [DM3](https://usa.yamaha.com/products/proaudio/mixers/dm3/index.html),
+ > [CL](https://usa.yamaha.com/products/proaudio/mixers/cl_series/index.html),
+ > and [QL](https://usa.yamaha.com/products/proaudio/mixers/ql_series/index.html)
+ > lines is the final goal of this library,
+ > but I do not have access to any of these consoles to be able to test against.
+ > If you do happen to have access and are willing to help out development, please [get in touch](https://github.com/BrenekH/yamaha-rcp-rs/discussions).
 
 ## Example
 
