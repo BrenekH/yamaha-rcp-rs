@@ -182,7 +182,7 @@ struct Connection {
 impl TFMixer {
     /// Create a new [TFMixer]
     ///
-    /// While this method takes connection info (pattern of `<ip address>:<port>`,
+    /// While this method takes connection info (pattern of `<ip address>:<port>`),
     /// it does not make any connections.
     /// They are created on demand up to the connection limit.
     ///
@@ -219,10 +219,16 @@ impl TFMixer {
         Ok(mixer)
     }
 
+    /// Sets the number of allowed connections
     pub fn set_connection_limit(&mut self, limit: u8) {
         self.connection_limit = limit;
+
+        // TODO: Remove excess connections if any exist
     }
 
+    /// Creates a new connection using the saved IP address and port.
+    ///
+    /// If the connection is not made within 3 seconds, a timeout error is produced.
     async fn new_connection(&self) -> Result<Connection, Error> {
         let (tx, rx) = mpsc::channel::<String>(16);
 
@@ -267,6 +273,11 @@ impl TFMixer {
         })
     }
 
+    /// Send a command string to the console.
+    ///
+    /// A non-error response from the console will be returned as an `Ok(String)` value,
+    /// but if an error in transit occurs or if the console returns an `ERROR` value,
+    /// that error will be returned as an `Err(Error)`.
     async fn send_command(&self, mut cmd: String) -> Result<String, Error> {
         cmd.push('\n');
 
@@ -328,6 +339,7 @@ impl TFMixer {
         result
     }
 
+    /// Generic method to request a boolean from the console
     async fn request_bool(&self, cmd: String) -> Result<bool, Error> {
         let response = self.send_command(cmd).await?;
 
@@ -337,6 +349,7 @@ impl TFMixer {
         }
     }
 
+    /// Generic method to request an integer from the console
     async fn request_int(&self, cmd: String) -> Result<i32, Error> {
         let response = self.send_command(cmd).await?;
 
@@ -348,6 +361,7 @@ impl TFMixer {
         }
     }
 
+    /// Generic method to request a string from the console
     async fn request_string(&self, cmd: String) -> Result<String, Error> {
         let response = self.send_command(cmd).await?;
 
