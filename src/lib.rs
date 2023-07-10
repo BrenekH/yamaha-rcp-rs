@@ -24,8 +24,8 @@ Remote control of [Yamaha mixing consoles](https://usa.yamaha.com/products/proau
 use yamaha_rcp_rs::{Error, TFMixer};
 
 #[tokio::main]
-fn main() -> Result<(), Error> {
-    let mixer = TFMixer::new("192.168.0.128:49280")?;
+async fn main() -> Result<(), Error> {
+    let mixer = TFMixer::new("192.168.0.128:49280").await?;
 
     // Set channel 1 to -10.00 dB
     mixer.set_fader_level(0, -10_00).await?;
@@ -157,9 +157,7 @@ impl FromStr for SceneList {
     }
 }
 
-/// Main client structure for TF series mixing consoles
-///
-/// Construct using [TFMixer::new]
+/// Main entry point to access a TF series mixer
 #[derive(Clone, Debug)]
 pub struct TFMixer {
     max_fader_val: i32,
@@ -171,6 +169,8 @@ pub struct TFMixer {
     connection_limit: u8,
 }
 
+/// Represents a connection that can be acquired by a thread
+/// to send commands to the console
 #[derive(Debug)]
 struct Connection {
     writer: OwnedWriteHalf,
@@ -178,6 +178,16 @@ struct Connection {
 }
 
 impl TFMixer {
+    /// Create a new [TFMixer]
+    ///
+    /// ```rust
+    /// use yamaha_rcp_rs::TFMixer;
+    ///
+    /// # tokio_test::block_on(async {
+    /// TFMixer::new("192.168.0.128:49280").await?;
+    /// # Ok::<(), yamaha_rcp_rs::Error>(())
+    /// # });
+    /// ```
     pub async fn new(addr: &str) -> Result<Self, Error> {
         let socket_addr: SocketAddr = addr.parse()?;
 
