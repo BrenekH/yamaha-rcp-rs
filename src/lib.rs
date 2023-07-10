@@ -20,8 +20,8 @@ Remote control of [Yamaha mixing consoles](https://usa.yamaha.com/products/proau
 
 ## Example
 
-```no_run
-use yamaha_rcp_rs::{Error, TFMixer};
+```rust
+use yamaha_rcp_rs::{TFMixer, Error};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -29,6 +29,8 @@ async fn main() -> Result<(), Error> {
 
     // Set channel 1 to -10.00 dB
     mixer.set_fader_level(0, -10_00).await?;
+
+    Ok(())
 }
 ```
 
