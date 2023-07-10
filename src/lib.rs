@@ -182,10 +182,15 @@ struct Connection {
 impl TFMixer {
     /// Create a new [TFMixer]
     ///
+    /// While this method takes connection info (pattern of `<ip address>:<port>`,
+    /// it does not make any connections.
+    /// They are created on demand up to the connection limit.
+    ///
     /// ```rust
     /// use yamaha_rcp_rs::TFMixer;
     ///
     /// # tokio_test::block_on(async {
+    /// // Creates new mixer using the default IP and port of the TF series consoles
     /// TFMixer::new("192.168.0.128:49280").await?;
     /// # Ok::<(), yamaha_rcp_rs::Error>(())
     /// # });
