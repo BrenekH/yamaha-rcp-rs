@@ -2,7 +2,7 @@
 // Clippy by default does not agree with.
 #![allow(clippy::inconsistent_digit_grouping)]
 
-use futures::future;
+use futures_util::future;
 use tokio::time;
 
 use yamaha_rcp_rs::{LabelColor, TFMixer};
