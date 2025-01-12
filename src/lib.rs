@@ -6,7 +6,10 @@ Remote control of [Yamaha mixing consoles](https://usa.yamaha.com/products/proau
 
 ## Disclaimer
 
- > This library is mainly tested against the [Yamaha TF Series](https://usa.yamaha.com/products/proaudio/mixers/tf/index.html)
+ > This library's API is nowhere near the "final" API.
+ > Development will follow Semantic Versioning, but expect many changes.
+
+ > Also, `yamaha-rcp` is mainly tested against the [Yamaha TF Series](https://usa.yamaha.com/products/proaudio/mixers/tf/index.html)
  > of consoles, specifically the TF1.
  > Fully tested compatibility of the
  > [Rivage PM](https://usa.yamaha.com/products/proaudio/mixers/rivage_pm/index.html),
@@ -21,7 +24,7 @@ Remote control of [Yamaha mixing consoles](https://usa.yamaha.com/products/proau
 ## Example
 
 ```rust
-use yamaha_rcp_rs::{TFMixer, Error};
+use yamaha_rcp::{TFMixer, Error};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -56,7 +59,7 @@ use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
 use tokio::sync::{mpsc, mpsc::Receiver, Mutex};
 use tokio::time;
 
-/// Enumeration of errors that originate from `yamaha_rcp_rs`
+/// Enumeration of errors that originate from `yamaha-rcp-rs`
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("network error: {0}")]
@@ -187,12 +190,12 @@ impl TFMixer {
     /// They are created on demand up to the connection limit.
     ///
     /// ```rust
-    /// use yamaha_rcp_rs::TFMixer;
+    /// use yamaha_rcp::TFMixer;
     ///
     /// # tokio_test::block_on(async {
     /// // Creates new mixer using the default IP and port of the TF series consoles
     /// TFMixer::new("192.168.0.128:49280").await?;
-    /// # Ok::<(), yamaha_rcp_rs::Error>(())
+    /// # Ok::<(), yamaha_rcp::Error>(())
     /// # });
     /// ```
     pub async fn new(addr: &str) -> Result<Self, Error> {

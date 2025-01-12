@@ -5,7 +5,7 @@
 use futures_util::future;
 use tokio::time;
 
-use yamaha_rcp_rs::{LabelColor, TFMixer};
+use yamaha_rcp::{LabelColor, TFMixer};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tf1.fade(i, -40_00, 10_00, 3000).await?;
             tf1.fade(i, 10_00, -40_00, 3000).await?;
             tf1.set_fader_level(i, -32800).await?;
-            Ok::<(), yamaha_rcp_rs::Error>(())
+            Ok::<(), yamaha_rcp::Error>(())
         });
     }
 
