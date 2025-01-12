@@ -6,7 +6,7 @@ license = "MIT"
 description = "Remote control of Yamaha mixing consoles using TCP/IP networking."
 documentation = "https://docs.rs/yamaha-rcp"
 repository = "https://github.com/BrenekH/yamaha-rcp-rs"
-readme = false
+readme = "README.md"
 keywords = ["networking", "audio", "mixing", "yamaha"]
 categories = ["api-bindings", "asynchronous"]
 
