@@ -220,10 +220,15 @@ impl TFMixer {
     }
 
     /// Sets the number of allowed connections
-    pub fn set_connection_limit(&mut self, limit: u8) {
+    pub async fn set_connection_limit(&mut self, limit: u8) {
         self.connection_limit = limit;
 
-        // TODO: Remove excess connections if any exist
+        // Remove excess connections if any exist
+        let mut conns = self.connections.lock().await;
+        let curr_num_conns = conns.len();
+        if curr_num_conns > self.connection_limit.into() {
+            conns.drain(0..(curr_num_conns - usize::from(self.connection_limit)));
+        }
     }
 
     /// Creates a new connection using the saved IP address and port.
