@@ -11,7 +11,7 @@ log = "0.4.19"
 serde = { version = "1.0.163", features = ["derive"] }
 thiserror = "1.0.40"
 time = "0.3.15"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "io-util", "macros"] }
 
 [dev-dependencies]
 tokio-test = "0.4.2"
